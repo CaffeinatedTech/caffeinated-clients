@@ -235,7 +235,7 @@ container, installable on your phone.
 
 ## Status
 
-**v0.1.3 — Phase 7 complete.** Everything in this README is implemented:
+**v0.1.4 — Phase 7 complete.** Everything in this README is implemented:
 clients (created with just a name), contacts with a single-primary rule,
 notes with pinned and secret flags and audited tap-to-reveal, projects and
 jobs, grouped search, dashboard widgets, and the mobile PWA shell. Settings
