@@ -256,8 +256,11 @@ HTMX conventions:
   (`linux/amd64`, `linux/arm64`) on `v*` tags and pushes `vX.Y.Z`,
   `latest`, and `sha-<short>`. (Deliberate change from the sibling
   repos' manual dated-tag builds — this project is public and PWA users
-  expect a pullable `latest`.) Multi-arch CGO means buildx + QEMU for
-  arm64.
+  expect a pullable `latest`.) Each arch is built on its native runner
+  (`ubuntu-latest` for amd64, `ubuntu-24.04-arm` for arm64 — free for
+  public repos) and the two are stitched into one manifest with
+  `buildx imagetools create`. No QEMU: emulating the CGO/SQLCipher
+  compile for arm64 took ~15 minutes, native takes a few.
 - **Coolify:** deploy from the GHCR image or the repo Dockerfile; set
   the domain + TLS, mount a volume at `/data`, set env vars, health
   check `/healthz`. Documented step by step in [docs/DEPLOY.md](docs/DEPLOY.md).
@@ -509,7 +512,8 @@ HTMX conventions:
 
 - **CGO + static musl build for SQLCipher.** The main new build risk.
   Prove it in Phase 1 with a hello-world open, then wire the Docker
-  build. buildx + QEMU for `linux/arm64`.
+  build. arm64 is built on a native runner (not QEMU) in the release
+  workflow.
 - **SQLCipher driver maintenance.** `mutecomm/go-sqlcipher` and its
   forks vary in liveness. Pick one, pin it, and record the choice and
   its last-release date in Phase 1. If none look maintained, the

@@ -9,43 +9,71 @@ permissions:
   packages: write
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
+  # Build each architecture on its native runner. Emulating arm64 under QEMU
+  # left the CGO/SQLCipher compile taking ~15 minutes; native is a few.
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Image metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/caffeinatedtech/caffeinated-clients
-          tags: |
-            type=ref,event=tag
-            type=sha,format=short
-            type=raw,value=latest
-
-      - name: Build and push (amd64 + arm64)
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          platforms: ${{ matrix.platform }}
           build-args: |
             VERSION=${{ github.ref_name }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          outputs: type=image,name=ghcr.io/caffeinatedtech/caffeinated-clients,push-by-digest=true,name-canonical=true,push=true
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ strategy.job-index }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Stitch the per-arch images into one multi-arch manifest with the release tags.
+  merge:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t ghcr.io/caffeinatedtech/caffeinated-clients:${{ github.ref_name }} \
+            -t ghcr.io/caffeinatedtech/caffeinated-clients:latest \
+            -t ghcr.io/caffeinatedtech/caffeinated-clients:sha-${GITHUB_SHA::7} \
+            $(printf 'ghcr.io/caffeinatedtech/caffeinated-clients@sha256:%s ' *)
+      - name: Inspect manifest
+        run: docker buildx imagetools inspect ghcr.io/caffeinatedtech/caffeinated-clients:${{ github.ref_name }}
