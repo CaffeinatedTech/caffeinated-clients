@@ -41,12 +41,14 @@ Android phone as a PWA with light and dark themes.
 - **Projects and jobs.** Long-running work lives on the dashboard; jobs
   are the discrete bits of work that roll up to a project or stand
   alone.
-- **Single-user password + TOTP 2FA.** Argon2id password hashing,
-  authenticator-app second factor, one-time recovery codes,
-  server-side sessions, CSRF protection, login rate limiting. Change the
-  password, re-enroll the authenticator, regenerate recovery codes, and
-  export a JSON copy from Settings — every security-sensitive change
-  re-authenticates first.
+- **Passkeys, with password + TOTP as an option.** Sign in with a
+  passkey (WebAuthn) — no shared secret, phishing-resistant — or create a
+  password account that requires an authenticator-app code. One-time
+  recovery codes work as break-glass. Argon2id password hashing,
+  server-side sessions, CSRF protection, login rate limiting. Manage
+  passkeys, change the password, re-enroll the authenticator, regenerate
+  recovery codes, and export a JSON copy from Settings; every
+  security-sensitive change re-authenticates first.
 - **Installable PWA.** Add to home screen on Android, standalone
   display, app shell and static assets cached for offline load; client
   data always requires the network.
@@ -112,6 +114,11 @@ go run .                       # serve; log in and enrol TOTP at /setup
 `CCLIENTS_DATA_DIR` is created if missing and defaults to `./data` for a
 local checkout; the container image sets it to `/data`.
 
+To create the first account **passkey-first** instead, skip the bootstrap
+variables and open `/register` in the browser: give it a display name and
+register a passkey. (Passkeys need a secure context: `https://` or
+`http://localhost`.)
+
 Docker:
 
 ```sh
@@ -138,7 +145,8 @@ defaults.
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `CCLIENTS_BASE_URL` | `http://localhost:8080` | Public URL; used for secure cookies, PWA, TOTP issuer |
+| `CCLIENTS_BASE_URL` | `http://localhost:8080` | Public URL; used for secure cookies, PWA, TOTP issuer, and the passkey relying-party ID/origin |
+| `CCLIENTS_RP_DISPLAY_NAME` | `caffeinated-clients` | Name shown in the passkey prompt |
 | `CCLIENTS_DB_KEY` | — (**required**) | Base64 32-byte key; the SQLCipher database key |
 | `CCLIENTS_DATA_DIR` | `./data` | Directory holding the SQLite file (container sets `/data`) |
 | `CCLIENTS_DB_PATH` | `$DATA_DIR/clients.db` | Override database location |
@@ -186,15 +194,36 @@ break-glass recovery, and upgrades — is in
 The whole database is encrypted at rest with SQLCipher (AES-256 page
 encryption, HMAC per page) using a key that exists only in the
 environment; client names, phones, notes, and everything else are
-unreadable without it, including through any index. One user logs in
-with an Argon2id password plus TOTP; sessions are random tokens stored
-hashed server-side, cookies are `HttpOnly`, `Secure`, `SameSite=Lax`,
-and every state change carries a CSRF token. Secret notes are masked by
-default; a reveal returns the value for that request only with
-`Cache-Control: no-store`, re-masks after 15 seconds, and is logged.
-Secrets never appear in normal responses, search, or logs. The app sets
-a strict CSP and makes no third-party requests. See
-[REQUIREMENTS.md](REQUIREMENTS.md) §Security for the full list.
+unreadable without it, including through any index. One user signs in
+with a passkey (WebAuthn) or with an Argon2id password plus TOTP; a
+passkey assertion is a complete factor and the server stores only public
+keys, while a passkey-only account has no password endpoint at all.
+Sessions are random tokens stored hashed server-side, cookies are
+`HttpOnly`, `Secure`, `SameSite=Lax`, and every state change carries a
+CSRF token. Secret notes are masked by default; a reveal returns the
+value for that request only with `Cache-Control: no-store`, re-masks
+after 15 seconds, and is logged. Secrets never appear in normal
+responses, search, or logs. The app sets a strict CSP and makes no
+third-party requests. See [REQUIREMENTS.md](REQUIREMENTS.md) §Security
+for the full list.
+
+## Passkeys
+
+Passkeys are the recommended sign-in. On first run you can create the
+account with a passkey and a display name — no password, no authenticator
+app — or choose a password (which requires TOTP). Once signed in, add
+more passkeys under **Settings → Passkeys** (a phone plus a laptop, say).
+There is no email or SMS recovery; ten single-use recovery codes are
+shown at setup and can sign you in if you lose every passkey.
+
+Passkeys need a secure context and a real host: use `https://` in
+production (the origin and relying-party ID come from
+`CCLIENTS_BASE_URL`) or `http://localhost` locally. A bare IP address
+does not work. Because the relying-party ID is derived from the host,
+changing `CCLIENTS_BASE_URL` to a different host invalidates existing
+passkeys (password/recovery login still works). If you use a password
+account, password sign-in always requires TOTP; a passkey does not, and
+neither weakens the other.
 
 ## Search and indexing
 

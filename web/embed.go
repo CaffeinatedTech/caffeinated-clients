@@ -38,6 +38,18 @@ var tmplFuncs = template.FuncMap{
 	// hasdate guards optional timestamps: a zero time.Time is a truthy struct
 	// in templates, so `{{if .SomeTime}}` alone is wrong.
 	"hasdate": func(t time.Time) bool { return !t.IsZero() },
+	// tsdate formats a stored SQL timestamp string (e.g. a passkey's
+	// created_at) for display, falling back to the raw value.
+	"tsdate": func(s string) string {
+		if s == "" {
+			return ""
+		}
+		t, err := time.Parse("2006-01-02T15:04:05.000Z", s)
+		if err != nil {
+			return s
+		}
+		return t.Format("2 Jan 2006")
+	},
 	// overdue reports whether an open job or project is past its due date. Due
 	// dates are stored date-only, so the comparison is on the date string.
 	"overdue": func(due time.Time, status string) bool {

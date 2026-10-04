@@ -39,6 +39,39 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.TrustProxy || cfg.Disable2FA {
 		t.Errorf("bool defaults wrong: trustProxy=%v disable2FA=%v", cfg.TrustProxy, cfg.Disable2FA)
 	}
+	if cfg.RPID != "localhost" {
+		t.Errorf("RPID = %q, want localhost", cfg.RPID)
+	}
+	if len(cfg.RPOrigins) != 1 || cfg.RPOrigins[0] != "http://localhost:8080" {
+		t.Errorf("RPOrigins = %v, want [http://localhost:8080]", cfg.RPOrigins)
+	}
+}
+
+func TestLoadDerivesWebAuthnFromBaseURL(t *testing.T) {
+	t.Setenv("CCLIENTS_DB_KEY", validKey())
+	t.Setenv("CCLIENTS_BASE_URL", "https://clients.example.com/some/path")
+	t.Setenv("CCLIENTS_RP_DISPLAY_NAME", "Acme CRM")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.RPID != "clients.example.com" {
+		t.Errorf("RPID = %q, want clients.example.com", cfg.RPID)
+	}
+	if len(cfg.RPOrigins) != 1 || cfg.RPOrigins[0] != "https://clients.example.com" {
+		t.Errorf("RPOrigins = %v, want [https://clients.example.com]", cfg.RPOrigins)
+	}
+	if cfg.RPDisplayName != "Acme CRM" {
+		t.Errorf("RPDisplayName = %q", cfg.RPDisplayName)
+	}
+}
+
+func TestLoadRejectsBaseURLWithoutHost(t *testing.T) {
+	t.Setenv("CCLIENTS_DB_KEY", validKey())
+	t.Setenv("CCLIENTS_BASE_URL", "https:///nohost")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected an error for a BaseURL without a host")
+	}
 }
 
 func TestLoadAcceptsUnpaddedKey(t *testing.T) {

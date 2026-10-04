@@ -49,6 +49,7 @@ optimized for one person pulling up a client in seconds while on a call.
 | **Contact** | A person at a client (name, role, phone, email). A client has one or more. |
 | **Note** | Free-form text attached to a client. May be flagged as a secret. |
 | **Secret note** | A note with the secret flag set. Masked in the UI and revealed only on demand. Used for passwords, API keys, tokens, licenses. |
+| **Passkey** | A WebAuthn credential (synced or device-bound) used to sign in. The private key stays on the authenticator; the server holds only the public key. |
 | **Project** | A body of work for a client with a lifecycle and optional due date. |
 | **Job** | A discrete unit of work, optionally under a project, with its own status. |
 
@@ -61,14 +62,18 @@ There is no separate "credential" object. Secrets are notes with a flag.
 - F1.1 Exactly one user account exists. The app must not start serving
   authenticated routes until that user exists.
 - F1.2 First-run bootstrap creates the single user from
-  `CCLIENTS_BOOTSTRAP_USERNAME` / `CCLIENTS_BOOTSTRAP_PASSWORD`, or via
-  an explicit `--bootstrap-admin` CLI command.
+  `CCLIENTS_BOOTSTRAP_USERNAME` / `CCLIENTS_BOOTSTRAP_PASSWORD`, via an
+  explicit `--bootstrap-admin` CLI command, or via the first-run web
+  screen at `/register` (passkey-first, or with a password). The web
+  screen is available only while no complete account exists.
 - F1.3 Passwords are hashed with Argon2id (sane default parameters,
   tunable via env) and never stored, logged, or returned in plaintext.
-- F1.4 Login requires password **and** a TOTP code. TOTP enrollment is
-  mandatory at first login, before any client data is shown. The
-  enrollment screen offers a scannable QR of the `otpauth://` URI as well
-  as the manual setup key; the same QR is shown when re-enrolling.
+- F1.4 A password login requires the password **and** a TOTP code. TOTP
+  enrollment is mandatory when an account is created with a password,
+  before any client data is shown. The enrollment screen offers a
+  scannable QR of the `otpauth://` URI as well as the manual setup key;
+  the same QR is shown when re-enrolling. See F1.13 for passkey sign-in,
+  which is a complete factor on its own.
 - F1.5 Ten single-use recovery codes are generated at enrollment,
   displayed exactly once, stored only as hashes, and accepted in place
   of a TOTP code.
@@ -93,6 +98,33 @@ There is no separate "credential" object. Secrets are notes with a flag.
   effect only after a code generated from it is confirmed, so the current
   authenticator keeps working until then. Re-enrollment regenerates the
   recovery codes, which are shown once.
+- F1.13 Passkeys (WebAuthn) are a complete, independent sign-in factor.
+  A successful passkey assertion creates a full session without a
+  password or TOTP code. The login page shows a
+  **Sign in with a passkey** button whenever at least one passkey is
+  registered, in addition to the password form when a password exists.
+- F1.14 The first and only account can be created passkey-first. The
+  first-run screen (`/register`, available only while no complete account
+  exists) asks for a display name and creates the account with a passkey,
+  or, alternatively, with a password (which then enrolls TOTP). No email
+  or SMS is used.
+- F1.15 When the account has no password (passkey-only), the password
+  form is not rendered and `POST /login` is refused before any password
+  verification, so there is no password attack surface.
+- F1.16 Passkeys are managed in Settings: list, add, rename, and remove.
+  Adding or removing a passkey requires re-authentication when a password
+  exists. The last remaining credential (passkey or password) can never
+  be removed. Removing the password requires at least one passkey and
+  disables TOTP with it.
+- F1.17 Recovery codes are accepted at the TOTP step and, when the
+  account has no password, as a standalone sign-in. Each code is
+  single-use and is the documented break-glass for a passkey-only
+  account.
+- F1.18 Passkeys require a secure context (HTTPS, or `http://localhost`
+  for local development) and a real host; the relying-party ID and origin
+  are derived from `CCLIENTS_BASE_URL`. A bare IP address is not
+  supported. The server stores only the credential public key and
+  metadata, never a private key or other secret.
 
 ### F2 — Client management
 
@@ -291,7 +323,9 @@ There is no separate "credential" object. Secrets are notes with a flag.
   events: login success/failure, TOTP enrollment, recovery-code use,
   session logout, note create/update, secret-note create/update/reveal/
   delete, secret-flag toggle, client create/delete, password change,
-  TOTP re-enrollment, recovery-code regeneration, and data export.
+  TOTP re-enrollment, recovery-code regeneration, data export, account
+  registration (method: passkey or password), and passkey
+  register/rename/remove/password-removal.
 - F13.2 Audit entries carry timestamp, event, target entity and id, and
   client IP; entries never contain the body of a secret note or any
   password material. For a reveal, the entry records the note id and
@@ -336,6 +370,11 @@ There is no separate "credential" object. Secrets are notes with a flag.
 - **S10** Losing `CCLIENTS_DB_KEY` means permanent loss of all data;
   the app must state this at startup and in the README. Wrong keys must
   fail closed (never open a database as if empty).
+- **S11** Passkey ceremonies are verified server-side (challenge,
+  origin, RP ID, signature, and sign counter) with no client-supplied
+  trust. Challenges are single-use, short-lived, and stored server-side;
+  the server stores only public keys and metadata. A passkey-only
+  account has no password hash and its password endpoint is disabled.
 
 ## 7. Quality requirements
 

@@ -14,8 +14,13 @@ import (
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	sess := sessionFrom(r.Context())
 	s.settingsPage(w, r, sess, http.StatusOK, func(d *pageData) {
-		if r.URL.Query().Get("notice") == "password" {
+		switch r.URL.Query().Get("notice") {
+		case "password":
 			d.Notice = "Password changed."
+		case "passkey":
+			d.Notice = "Passkeys updated."
+		case "password-removed":
+			d.Notice = "Password removed. This account now signs in with passkeys only."
 		}
 	})
 }
@@ -43,6 +48,10 @@ func (s *Server) settingsData(r *http.Request, sess *auth.Session) (pageData, er
 	if err != nil {
 		return pageData{}, err
 	}
+	passkeys, err := s.svc.ListPasskeys(r.Context(), sess.User.ID)
+	if err != nil {
+		return pageData{}, err
+	}
 	return pageData{
 		Title:             "Settings",
 		CSRFToken:         sess.CSRFToken,
@@ -51,6 +60,9 @@ func (s *Server) settingsData(r *http.Request, sess *auth.Session) (pageData, er
 		Active:            "settings",
 		Audit:             audit,
 		RecoveryRemaining: remaining,
+		Passkeys:          passkeys,
+		HasPasskeys:       len(passkeys) > 0,
+		PasswordEnabled:   sess.User.PasswordHash != "",
 	}, nil
 }
 
@@ -188,9 +200,16 @@ func (s *Server) handleTOTPReenrollConfirm(w http.ResponseWriter, r *http.Reques
 
 func (s *Server) handleRecoveryRegenerate(w http.ResponseWriter, r *http.Request) {
 	sess := sessionFrom(r.Context())
-	if ok, msg := s.reauth(r, sess, r.FormValue("password"), r.FormValue("code")); !ok {
-		s.settingsPage(w, r, sess, http.StatusBadRequest, func(d *pageData) { d.Error = msg })
+	enabled, err := s.svc.PasswordLoginEnabled(r.Context())
+	if err != nil {
+		s.serverError(w, err)
 		return
+	}
+	if enabled {
+		if ok, msg := s.reauth(r, sess, r.FormValue("password"), r.FormValue("code")); !ok {
+			s.settingsPage(w, r, sess, http.StatusBadRequest, func(d *pageData) { d.Error = msg })
+			return
+		}
 	}
 	codes, err := auth.NewRecoveryCodes()
 	if err != nil {

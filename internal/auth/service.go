@@ -172,6 +172,10 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 	if err != nil {
 		return User{}, false, err
 	}
+	// A passkey-only account has no password; it can never be matched here.
+	if u.PasswordHash == "" {
+		return User{}, false, nil
+	}
 	if !VerifyPassword(u.PasswordHash, password) {
 		return User{}, false, nil
 	}

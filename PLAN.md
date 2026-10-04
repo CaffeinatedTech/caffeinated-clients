@@ -109,7 +109,16 @@ encrypted CRM.
   dependencies, BSD-3-Clause, by the Go Authors). This is the one added
   dependency: stdlib has no QR encoder, and a server-side render keeps the
   `otpauth://` secret out of URLs and needs no client JS.
-- No JS framework; icons are inline SVG.
+- `github.com/go-webauthn/webauthn` **v0.13.4** for passkey (WebAuthn)
+  registration and assertion verification. Justification: stdlib cannot
+  decode CBOR/COSE keys or verify attestation/assertion signatures, and
+  hand-rolling that is exactly the bespoke crypto this project avoids.
+  v0.13.4 is pinned because it requires Go 1.23 (the build is Go 1.24 and
+  the Docker stage is `golang:1.24-alpine`); v0.14+ would force a Go 1.26
+  toolchain. Pure Go, so the CGO/static-musl link is unaffected.
+- No JS framework; icons are inline SVG. The passkey browser bridge is a
+  small vendored `web/static/passkeys.js` (base64url helpers plus
+  `navigator.credentials.create/get`); WebAuthn cannot run server-side.
 - Go module path `github.com/CaffeinatedTech/caffeinated-clients`.
 - Image `ghcr.io/caffeinatedtech/caffeinated-clients`.
 
@@ -145,6 +154,11 @@ jobs       (id, client_id, project_id, title, description, status,
             priority, due_date, completed_at, created_at, updated_at)
 users      (id, username, password_hash, totp_secret, totp_enabled,
             totp_enrolled_at, created_at, updated_at)
+webauthn_credentials (id, user_id, credential_id, public_key,
+            attestation_type, aaguid, sign_count, backup_eligible,
+            backup_state, transports, name, created_at, last_used_at)
+webauthn_challenges (id, token_hash, user_id, kind, session_data,
+            created_at, expires_at)
 recovery_codes (id, user_id, code_hash, used_at, created_at)
 sessions   (id, token_hash, user_id, created_at, last_seen_at,
             expires_at, user_agent, ip)
@@ -156,6 +170,12 @@ Notes:
 - There is **no `secrets` table**. Secret notes are `notes` rows with
   `is_secret = 1`. The TOTP secret is the one non-note secret and lives
   on `users`, still protected by whole-database encryption.
+- A passkey is not a secret: `webauthn_credentials` stores only the
+  public key, the credential ID, and authenticator metadata (flags,
+  counter, AAGUID, transports). `users.password_hash = ''` marks a
+  passkey-only account; it has no password form and its `/login` POST is
+  refused. `webauthn_challenges` holds single-use ceremony state
+  (challenge + expiry) keyed by a hashed cookie token, pruned at startup.
 - `phone_digits` is a normalized digits-only copy for search.
 - ALL of the above is encrypted at rest by SQLCipher; the model makes
   no distinction for encryption purposes.
@@ -176,10 +196,17 @@ Notes:
 ```
 GET  /                     dashboard (search + ongoing + jobs + recent)
 GET  /search?q=            HTMX results partial (also full-page fallback)
-GET  /login                login form
-POST /login                password step -> TOTP step
+GET  /login                login form (passkey button + password when set)
+POST /login                password step -> TOTP step (refused if no password)
 GET  /login/totp           TOTP / recovery-code form
 POST /login/totp           complete login
+POST /login/passkey/begin  WebAuthn assertion options (JSON; sets challenge cookie)
+POST /login/passkey/finish complete passkey login -> /
+GET  /login/recovery       standalone recovery-code form (passkey-only)
+POST /login/recovery       recovery-code login (passkey-only)
+GET  /register             first-run: create the account with a passkey or password
+POST /register/passkey/begin | finish  register a passkey -> recovery codes
+POST /register/password    create a password account -> /setup
 POST /logout               destroy session
 GET  /setup                TOTP enrollment + recovery codes (first login)
 POST /setup                confirm enrollment
@@ -194,7 +221,10 @@ POST /clients/{id}/delete  cascade delete (confirm)
 POST /notes/{id}/reveal    reveal a secret note (audited, no-store)
 GET  /projects  /projects/{id}
 GET  /jobs      /jobs/{id}
-GET  /settings             password, 2FA, export, audit
+GET  /settings             password, 2FA, passkeys, export, audit
+POST /settings/passkeys/begin | finish  add a passkey (re-auth if password set)
+POST /settings/passkeys/{id}/rename | delete  manage passkeys (last one guarded)
+POST /settings/password/remove  drop the password (needs a passkey; clears TOTP)
 GET  /healthz              health
 GET  /manifest.webmanifest, /sw.js, /offline, /static/*
 ```
@@ -222,6 +252,13 @@ HTMX conventions:
   `CCLIENTS_DISABLE_2FA=true`.
 - **Password:** Argon2id; parameters from env with conservative
   defaults.
+- **Passkeys:** WebAuthn registration and assertion are verified
+  server-side (challenge, RP ID, origin, signature, sign counter, backup
+  flags) by `go-webauthn`; challenges are single-use, short-lived, stored
+  hashed in the encrypted database, and session data is stored
+  server-side, never in the client. Only public keys are persisted. A
+  passkey-only account (`password_hash = ''`) renders no password form
+  and refuses `POST /login` before any hashing.
 - **TOTP:** RFC 6238, SHA-1, 6 digits, 30 s, ±1 step; secret stored in
   the encrypted `users` row.
 - **Recovery codes:** 10 codes, `crypto/rand`, shown once, stored as
@@ -500,6 +537,41 @@ HTMX conventions:
   is clean-stop + file copy (SQLite checkpoints on clean close); a
   `--backup`/`VACUUM INTO` command is the documented alternative for a
   tool build, not shipped.
+
+### Phase 8 — Passkeys (WebAuthn)
+
+- [x] First-run `/register`: create the single account with a passkey
+      (display name only) or with a password+TOTP.
+- [x] Passkey sign-in: `/login` shows a passkey button; a successful
+      assertion creates a full session, skipping password and TOTP.
+- [x] Passkeys in Settings: add (re-auth when a password exists), rename,
+      remove; the last credential can never be removed.
+- [x] Passkey-only accounts render no password form and `POST /login` is
+      refused before any Argon2; standalone recovery-code login at
+      `/login/recovery` is the break-glass.
+- [x] Migration `0004_passkeys.sql`; stale challenges pruned at startup.
+- [x] Tests: passkey CRUD, challenge single-use/kind/expiry, login-page
+      gating, standalone recovery login, first-run registration gating.
+- **Decisions landed:** passkeys live in `internal/auth` as plain rows
+  (`Passkey`) so the package keeps no WebAuthn import; the HTTP adapter in
+  `web/passkeys.go` builds `webauthn.User`. The user handle is
+  `sha256("caffeinated-clients:user:"+id)`, stable without another column.
+  Sign-in is single-user, so login is non-discoverable: the server knows
+  the one user and passes its credential IDs, which works without
+  resident keys. The register/settings ceremonies use the same
+  `register` challenge kind; begin endpoints return JSON and finish is a
+  real form POST, so success still renders server-side (recovery codes)
+  and needs no JSON rendering. TOTP is paired with a password only.
+  Rotation of the relying-party identity (changing `CCLIENTS_BASE_URL`
+  host) invalidates stored passkeys; documented.
+- **Deferred / deliberate corner-cut (`ponytail:`):** step-up
+  re-authentication for passkey-only accounts is the session itself, not
+  a fresh assertion. Adding passkeys to a passkey-only account and
+  removing the last-but-one do not re-prompt; a full session is required.
+  Upgrade path: a `reauth_at` session column set by a fresh assertion,
+  required within a short window for credential changes. Adding a
+  password to a passkey-only account (and re-adding TOTP) is out of scope
+  for this phase: the account model is chosen at registration.
 
 ### Later / explicitly out of scope for v1
 

@@ -94,6 +94,18 @@ Rules:
 From then on, login is password + authenticator code, or a single-use
 recovery code.
 
+### Passkey-first alternative
+
+Instead of the bootstrap variables, you can create the account with a
+passkey: deploy with `CCLIENTS_BASE_URL` set to the real HTTPS host and no
+bootstrap credentials, open the site, and follow `/register` — give it a
+display name and register a passkey. Add more passkeys (e.g. phone and
+laptop) in **Settings → Passkeys**; a passkey-only account has no password
+and no TOTP. Keep the recovery codes safe, as they are the break-glass if
+every passkey is lost. Passkeys require HTTPS and a hostname: a bare IP
+does not work, and changing `CCLIENTS_BASE_URL` to a different host
+invalidates existing passkeys.
+
 ## 4. Backups
 
 The whole application state is the encrypted SQLite file, so a backup is

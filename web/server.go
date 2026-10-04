@@ -15,6 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
+
 	"github.com/CaffeinatedTech/caffeinated-clients/internal/auth"
 	"github.com/CaffeinatedTech/caffeinated-clients/internal/config"
 	"github.com/CaffeinatedTech/caffeinated-clients/internal/crm"
@@ -22,9 +25,11 @@ import (
 )
 
 const (
-	sessionCookieName = "cc_session"
-	csrfCookieName    = "cc_csrf"
-	pendingTTL        = 10 * time.Minute
+	sessionCookieName   = "cc_session"
+	csrfCookieName      = "cc_csrf"
+	challengeCookieName = "cc_wa"
+	pendingTTL          = 10 * time.Minute
+	challengeTTL        = 5 * time.Minute
 )
 
 var csrfCookieMaxAge = int((time.Hour).Seconds())
@@ -44,6 +49,7 @@ type Server struct {
 	partials *template.Template
 	static   fs.FS
 	limiter  *auth.Limiter
+	wa       *webauthn.WebAuthn
 }
 
 // New builds a Server and parses the embedded templates.
@@ -60,7 +66,26 @@ func New(svc *auth.Service, cfg *config.Config, log *slog.Logger, db *sql.DB) (*
 	if err != nil {
 		return nil, err
 	}
-	return &Server{svc: svc, cfg: cfg, log: log, db: db, crm: crm.New(db), tmpl: tmpl, partials: partials, static: static, limiter: auth.NewLimiter()}, nil
+	// The relying-party identity comes from CCLIENTS_BASE_URL. Detail is skipped
+	// for passkeys (a real host and HTTPS), which is the WebAuthn requirement.
+	if cfg.RPID == "" || len(cfg.RPOrigins) == 0 {
+		if err := cfg.DeriveWebAuthn(); err != nil {
+			return nil, err
+		}
+	}
+	wa, err := webauthn.New(&webauthn.Config{
+		RPID:          cfg.RPID,
+		RPDisplayName: cfg.RPDisplayName,
+		RPOrigins:     cfg.RPOrigins,
+		AuthenticatorSelection: protocol.AuthenticatorSelection{
+			UserVerification: protocol.VerificationPreferred,
+			ResidentKey:      protocol.ResidentKeyRequirementPreferred,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &Server{svc: svc, cfg: cfg, log: log, db: db, crm: crm.New(db), tmpl: tmpl, partials: partials, static: static, limiter: auth.NewLimiter(), wa: wa}, nil
 }
 
 // Handler returns the routed, middleware-wrapped http.Handler.
@@ -75,6 +100,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /login", s.requireCSRF(s.handleLoginPost))
 	mux.HandleFunc("GET /login/totp", s.requirePending(s.handleTOTPPage))
 	mux.HandleFunc("POST /login/totp", s.requirePending(s.requireCSRF(s.handleTOTPPost)))
+	mux.HandleFunc("GET /login/recovery", s.requireAnonymous(s.handleRecoveryLoginPage))
+	mux.HandleFunc("POST /login/recovery", s.requireCSRF(s.handleRecoveryLoginPost))
+	mux.HandleFunc("POST /login/passkey/begin", s.requireCSRF(s.handleLoginPasskeyBegin))
+	mux.HandleFunc("POST /login/passkey/finish", s.requireCSRF(s.handleLoginPasskeyFinish))
+
+	// First-run account creation. These are the only unauthenticated write
+	// routes: they exist solely while no complete account exists and vanish
+	// once one does (F1.2).
+	mux.HandleFunc("GET /register", s.requireAnonymous(s.handleRegisterPage))
+	mux.HandleFunc("POST /register/passkey/begin", s.requireCSRF(s.handleRegisterPasskeyBegin))
+	mux.HandleFunc("POST /register/passkey/finish", s.requireCSRF(s.handleRegisterPasskeyFinish))
+	mux.HandleFunc("POST /register/password", s.requireCSRF(s.handleRegisterPassword))
 	mux.HandleFunc("GET /setup", s.requirePending(s.handleSetupPage))
 	mux.HandleFunc("POST /setup", s.requirePending(s.requireCSRF(s.handleSetupPost)))
 	mux.HandleFunc("POST /logout", s.requireFull(s.requireCSRF(s.handleLogout)))
@@ -119,6 +156,11 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /settings", s.requireFull(s.handleSettings))
 	mux.HandleFunc("POST /settings/password", s.requireFull(s.requireCSRF(s.handlePasswordChange)))
+	mux.HandleFunc("POST /settings/password/remove", s.requireFull(s.requireCSRF(s.handlePasswordRemove)))
+	mux.HandleFunc("POST /settings/passkeys/begin", s.requireFull(s.requireCSRF(s.handlePasskeyAddBegin)))
+	mux.HandleFunc("POST /settings/passkeys/finish", s.requireFull(s.requireCSRF(s.handlePasskeyAddFinish)))
+	mux.HandleFunc("POST /settings/passkeys/{id}/rename", s.requireFull(s.requireCSRF(s.handlePasskeyRename)))
+	mux.HandleFunc("POST /settings/passkeys/{id}/delete", s.requireFull(s.requireCSRF(s.handlePasskeyDelete)))
 	mux.HandleFunc("POST /settings/2fa/start", s.requireFull(s.requireCSRF(s.handleTOTPReenrollStart)))
 	mux.HandleFunc("POST /settings/2fa/confirm", s.requireFull(s.requireCSRF(s.handleTOTPReenrollConfirm)))
 	mux.HandleFunc("POST /settings/recovery-codes", s.requireFull(s.requireCSRF(s.handleRecoveryRegenerate)))
@@ -363,6 +405,15 @@ type pageData struct {
 	Notice            string
 	RecoveryRemaining int
 
+	// Passkey (WebAuthn) view model. HasPasskeys/PasswordEnabled tell the login
+	// page which sign-in methods exist; a passkey-only account never renders the
+	// password form.
+	Passkeys        []auth.Passkey
+	HasPasskeys     bool
+	PasswordEnabled bool
+	PasskeyName     string
+	RegisterName    string
+
 	// Phase 6 projects and jobs view model.
 	Projects        []crm.Project
 	Project         crm.Project
@@ -496,13 +547,50 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // --- handlers -----------------------------------------------------------
 
 func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
+	user, err := s.svc.GetUser(r.Context())
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Redirect(w, r, "/register", http.StatusSeeOther)
+		return
+	}
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	passkeys, err := s.svc.ListPasskeys(r.Context(), user.ID)
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	// An account with a name but no credential is an abandoned registration.
+	if user.PasswordHash == "" && len(passkeys) == 0 {
+		http.Redirect(w, r, "/register", http.StatusSeeOther)
+		return
+	}
+	errMsg := ""
+	if r.URL.Query().Get("error") == "passkey" {
+		errMsg = "Passkey sign-in was cancelled or did not match. Try again."
+	}
 	s.render(w, http.StatusOK, "login.html", pageData{
-		Title:     "Sign in",
-		CSRFToken: s.ensureCSRFCookie(w, r),
+		Title:           "Sign in",
+		Error:           errMsg,
+		CSRFToken:       s.ensureCSRFCookie(w, r),
+		HasPasskeys:     len(passkeys) > 0,
+		PasswordEnabled: user.PasswordHash != "",
 	})
 }
 
 func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
+	// A passkey-only account has no password. Refuse before any Argon2 work so
+	// the password endpoint is not an attack surface at all (F1.13).
+	enabled, err := s.svc.PasswordLoginEnabled(r.Context())
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	if !enabled {
+		http.Error(w, "password sign-in is not enabled", http.StatusForbidden)
+		return
+	}
 	ip := s.clientIP(r)
 	username := strings.TrimSpace(r.FormValue("username"))
 	password := r.FormValue("password")

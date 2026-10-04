@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -33,6 +34,14 @@ type Config struct {
 	Argon2Memory  uint32
 	Argon2Time    uint32
 	Argon2Threads uint8
+
+	// WebAuthn/passkey relying-party identity, derived from BaseURL. RPID is
+	// the host without a port; RPOrigins is the single fully-qualified origin
+	// (scheme://host) a ceremony must come from. Passkeys require HTTPS (or
+	// http://localhost) and a real host, never a bare IP, per the WebAuthn spec.
+	RPID          string
+	RPOrigins     []string
+	RPDisplayName string
 }
 
 // Load reads the environment and returns a validated Config. It fails closed:
@@ -53,6 +62,10 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	c.DBKey = key
+
+	if err := c.DeriveWebAuthn(); err != nil {
+		return nil, err
+	}
 
 	if c.SessionTTL, err = parseDuration("CCLIENTS_SESSION_TTL", "720h"); err != nil {
 		return nil, err
@@ -81,6 +94,26 @@ func Load() (*Config, error) {
 	}
 	c.Argon2Threads = uint8(threads)
 	return c, nil
+}
+
+// DeriveWebAuthn sets the relying-party identity for passkeys from BaseURL.
+// RPID is the host (no port); RPOrigins is the single origin (scheme://host).
+// A path on BaseURL is ignored: WebAuthn origins never carry one.
+func (c *Config) DeriveWebAuthn() error {
+	u, err := url.Parse(c.BaseURL)
+	if err != nil {
+		return fmt.Errorf("CCLIENTS_BASE_URL is not a valid URL: %q", c.BaseURL)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("CCLIENTS_BASE_URL must be http or https, got %q", c.BaseURL)
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("CCLIENTS_BASE_URL must include a host, got %q", c.BaseURL)
+	}
+	c.RPID = u.Hostname()
+	c.RPOrigins = []string{u.Scheme + "://" + u.Host}
+	c.RPDisplayName = getenv("CCLIENTS_RP_DISPLAY_NAME", "caffeinated-clients")
+	return nil
 }
 
 func getenv(key, def string) string {

@@ -67,6 +67,9 @@ func run() error {
 	if err := svc.DeleteExpiredSessions(ctx); err != nil {
 		return err
 	}
+	if err := svc.DeleteExpiredChallenges(ctx); err != nil {
+		return err
+	}
 
 	if *bootstrap {
 		if cfg.BootstrapUser == "" || cfg.BootstrapPass == "" {
