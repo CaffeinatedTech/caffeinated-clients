@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"io/fs"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,6 +42,14 @@ const (
 func Open(path string, key []byte) (*sql.DB, error) {
 	if len(key) != 32 {
 		return nil, fmt.Errorf("database key must be 32 bytes, got %d", len(key))
+	}
+
+	// Create the data directory on first run (e.g. CCLIENTS_DATA_DIR=./data).
+	// 0700 keeps the encrypted file and its WAL sidecars private to the user.
+	if dir := filepath.Dir(path); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return nil, fmt.Errorf("create data directory: %w", err)
+		}
 	}
 
 	// PRAGMAs passed in the DSN are applied to every pooled connection, with

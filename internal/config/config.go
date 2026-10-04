@@ -45,7 +45,7 @@ func Load() (*Config, error) {
 		BootstrapPass: os.Getenv("CCLIENTS_BOOTSTRAP_PASSWORD"),
 	}
 
-	dataDir := getenv("CCLIENTS_DATA_DIR", "/data")
+	dataDir := getenv("CCLIENTS_DATA_DIR", "./data")
 	c.DBPath = getenv("CCLIENTS_DB_PATH", filepath.Join(dataDir, "clients.db"))
 
 	key, err := decodeKey(os.Getenv("CCLIENTS_DB_KEY"))

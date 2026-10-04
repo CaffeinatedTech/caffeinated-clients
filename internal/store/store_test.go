@@ -121,6 +121,20 @@ func TestOpenRejectsBadKeyLength(t *testing.T) {
 	}
 }
 
+// Open must create a missing data directory so a fresh local checkout works.
+func TestOpenCreatesDataDir(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "data", "clients.db")
+	db := openMigrated(t, path, testKey())
+	defer db.Close()
+	info, err := os.Stat(filepath.Dir(path))
+	if err != nil {
+		t.Fatalf("data dir not created: %v", err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("data dir mode = %o, want 700", info.Mode().Perm())
+	}
+}
+
 func TestMigrateIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "clients.db")

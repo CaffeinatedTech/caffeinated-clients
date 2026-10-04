@@ -102,11 +102,15 @@ after changing templates — `make css`):
 git clone https://github.com/CaffeinatedTech/caffeinated-clients
 cd caffeinated-clients
 export CCLIENTS_DB_KEY=$(head -c 32 /dev/urandom | base64)
+export CCLIENTS_DATA_DIR=./data
 export CCLIENTS_BOOTSTRAP_USERNAME=admin
 export CCLIENTS_BOOTSTRAP_PASSWORD='pick-a-long-passphrase'
 go run . --bootstrap-admin     # initialise + migrate, create the single user
 go run .                       # serve; log in and enrol TOTP at /setup
 ```
+
+`CCLIENTS_DATA_DIR` is created if missing and defaults to `./data` for a
+local checkout; the container image sets it to `/data`.
 
 Docker:
 
@@ -136,7 +140,7 @@ defaults.
 |---|---|---|
 | `CCLIENTS_BASE_URL` | `http://localhost:8080` | Public URL; used for secure cookies, PWA, TOTP issuer |
 | `CCLIENTS_DB_KEY` | — (**required**) | Base64 32-byte key; the SQLCipher database key |
-| `CCLIENTS_DATA_DIR` | `/data` | Directory holding the SQLite file |
+| `CCLIENTS_DATA_DIR` | `./data` | Directory holding the SQLite file (container sets `/data`) |
 | `CCLIENTS_DB_PATH` | `$DATA_DIR/clients.db` | Override database location |
 | `CCLIENTS_LISTEN_ADDR` | `:8080` | Bind address |
 | `CCLIENTS_SESSION_TTL` | `720h` | Absolute session lifetime; idle timeout is 1/8 of it |
