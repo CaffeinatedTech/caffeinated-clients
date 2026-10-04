@@ -1,8 +1,8 @@
 # PLAN — caffeinated-clients
 
 Implementation plan for a single-user, installable, self-hosted CRM for
-existing IT clients. This document is a plan, not a status report — no
-code exists yet. Phases are ordered so each ends somewhere runnable.
+existing IT clients. Phase checkboxes track what has landed. Phases are
+ordered so each ends somewhere runnable.
 
 ## Why this shape
 
@@ -307,15 +307,33 @@ HTMX conventions:
 
 ### Phase 2 — Auth, sessions, CSRF, bootstrap
 
-- [ ] Single-user bootstrap (env or `--bootstrap-admin`).
-- [ ] Argon2id password hashing + login password step.
-- [ ] TOTP enrollment (`/setup`) + verification, recovery codes.
-- [ ] Server-side sessions, secure cookie, idle + absolute expiry.
-- [ ] CSRF tokens for all non-GET requests.
-- [ ] Login rate limiting and audit entries.
-- [ ] `CCLIENTS_DISABLE_2FA` break-glass path (loud warning).
-- [ ] Tests: password verify, TOTP window, session expiry, CSRF reject,
+- [x] Single-user bootstrap (env or `--bootstrap-admin`).
+- [x] Argon2id password hashing + login password step.
+- [x] TOTP enrollment (`/setup`) + verification, recovery codes.
+- [x] Server-side sessions, secure cookie, idle + absolute expiry.
+- [x] CSRF tokens for all non-GET requests.
+- [x] Login rate limiting and audit entries.
+- [x] `CCLIENTS_DISABLE_2FA` break-glass path (loud warning).
+- [x] Tests: password verify, TOTP window, session expiry, CSRF reject,
       recovery-code single use, wrong DB key fails closed.
+- **Decisions landed:** auth lives in `internal/auth` (pure crypto +
+  DB access) and HTTP in the `web` package with `//go:embed` templates
+  under `web/templates/`; no new web dependency. Sessions are stored
+  server-side with a hashed token; the raw token never touches the DB.
+  Migration `0002_auth.sql` adds `sessions.stage`
+  (`pending`/`full`) and `sessions.csrf_token`: a session is `pending`
+  between the password step and a completed second factor, and only
+  `full` sessions reach app routes. The session token is rotated on
+  every stage transition (no fixation). The login form uses a
+  double-submit CSRF cookie; authenticated POSTs use the per-session
+  token. Argon2id parameters are env-tunable
+  (`CCLIENTS_ARGON2_MEMORY`/`_TIME`/`_THREADS`) and recorded inside each
+  PHC hash. Recovery codes keep the planned Argon2id hashing.
+  `--bootstrap-admin` and first-run auto-bootstrap both create the
+  single user from the bootstrap env vars.
+- **Deferred:** a QR image for TOTP enrollment (the `<secret>` and
+  `otpauth://` URI are shown; a QR needs a decoder/generator dependency
+  or a client-side library — revisit in Phase 3 if wanted).
 
 ### Phase 3 — App shell, theming, PWA
 

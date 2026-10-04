@@ -9,7 +9,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -18,9 +17,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/CaffeinatedTech/caffeinated-clients/internal/auth"
 	"github.com/CaffeinatedTech/caffeinated-clients/internal/config"
 	"github.com/CaffeinatedTech/caffeinated-clients/internal/logging"
 	"github.com/CaffeinatedTech/caffeinated-clients/internal/store"
+	"github.com/CaffeinatedTech/caffeinated-clients/web"
 )
 
 func main() {
@@ -62,15 +63,66 @@ func run() error {
 		return err
 	}
 
+	svc := auth.NewService(db, authParams(cfg), "caffeinated-clients")
+	if err := svc.DeleteExpiredSessions(ctx); err != nil {
+		return err
+	}
+
 	if *bootstrap {
-		log.Info("encrypted database ready", "path", cfg.DBPath)
-		// ponytail: the single-user account is created by the auth work in
-		// Phase 2; this flag exists now so the CLI surface is stable.
-		log.Info("single-user account bootstrap lands with authentication (Phase 2); no user created yet")
+		if cfg.BootstrapUser == "" || cfg.BootstrapPass == "" {
+			return errors.New("--bootstrap-admin requires CCLIENTS_BOOTSTRAP_USERNAME and CCLIENTS_BOOTSTRAP_PASSWORD")
+		}
+		created, err := svc.Bootstrap(ctx, cfg.BootstrapUser, cfg.BootstrapPass)
+		if err != nil {
+			return err
+		}
+		if created {
+			log.Info("created the single user", "username", cfg.BootstrapUser)
+		} else {
+			log.Info("single user already exists; nothing to do")
+		}
 		return nil
 	}
 
-	return serve(ctx, log, cfg, db)
+	if err := ensureUser(ctx, log, svc, cfg); err != nil {
+		return err
+	}
+
+	return serve(ctx, log, cfg, db, svc)
+}
+
+// ensureUser auto-bootstraps the single account from the environment on first
+// run. If no user exists and no bootstrap credentials are set, it warns and
+// lets the app start; the login flow simply cannot succeed until a user exists.
+func ensureUser(ctx context.Context, log *slog.Logger, svc *auth.Service, cfg *config.Config) error {
+	n, err := svc.UserCount(ctx)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	if cfg.BootstrapUser == "" || cfg.BootstrapPass == "" {
+		log.Warn("no user account exists; set CCLIENTS_BOOTSTRAP_USERNAME/PASSWORD or run --bootstrap-admin")
+		return nil
+	}
+	created, err := svc.Bootstrap(ctx, cfg.BootstrapUser, cfg.BootstrapPass)
+	if err != nil {
+		return err
+	}
+	if created {
+		log.Info("created the single user from bootstrap env", "username", cfg.BootstrapUser)
+	}
+	return nil
+}
+
+// authParams maps configuration onto the Argon2id cost parameters.
+func authParams(cfg *config.Config) auth.Params {
+	p := auth.DefaultParams()
+	p.Memory = cfg.Argon2Memory
+	p.Time = cfg.Argon2Time
+	p.Threads = cfg.Argon2Threads
+	return p
 }
 
 // healthcheckRun validates that the (existing) encrypted database can be
@@ -90,22 +142,15 @@ func healthcheckRun(cfg *config.Config) error {
 	return nil
 }
 
-func serve(ctx context.Context, log *slog.Logger, cfg *config.Config, db *sql.DB) error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		if err := store.Health(r.Context(), db); err != nil {
-			log.Error("healthz: database ping failed", "err", err)
-			http.Error(w, "unhealthy", http.StatusServiceUnavailable)
-			return
-		}
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		io.WriteString(w, "ok\n")
-	})
+func serve(ctx context.Context, log *slog.Logger, cfg *config.Config, db *sql.DB, svc *auth.Service) error {
+	srvWeb, err := web.New(svc, cfg, log, db)
+	if err != nil {
+		return err
+	}
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
-		Handler:           mux,
+		Handler:           srvWeb.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}

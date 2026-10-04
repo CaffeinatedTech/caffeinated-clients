@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · caffeinated-clients</title>
+</head>
+<body>
+  <main>
+    <h1>Recovery codes</h1>
+    <p role="alert">Save these now. Each works once in place of a code from your authenticator app, and they will not be shown again.</p>
+    <ul>
+      {{range .Codes}}<li><code>{{.}}</code></li>{{end}}
+    </ul>
+    <p><a href="/">Continue to the app</a></p>
+  </main>
+</body>
+</html>

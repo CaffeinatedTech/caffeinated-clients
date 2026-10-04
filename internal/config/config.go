@@ -30,6 +30,9 @@ type Config struct {
 	BootstrapUser string
 	BootstrapPass string
 	Disable2FA    bool
+	Argon2Memory  uint32
+	Argon2Time    uint32
+	Argon2Threads uint8
 }
 
 // Load reads the environment and returns a validated Config. It fails closed:
@@ -63,6 +66,20 @@ func Load() (*Config, error) {
 	if c.LogLevel, err = parseLevel(getenv("CCLIENTS_LOG_LEVEL", "info")); err != nil {
 		return nil, err
 	}
+	if c.Argon2Memory, err = parseUint32("CCLIENTS_ARGON2_MEMORY", 64*1024); err != nil {
+		return nil, err
+	}
+	if c.Argon2Time, err = parseUint32("CCLIENTS_ARGON2_TIME", 3); err != nil {
+		return nil, err
+	}
+	threads, err := parseUint32("CCLIENTS_ARGON2_THREADS", 4)
+	if err != nil {
+		return nil, err
+	}
+	if threads == 0 || threads > 255 {
+		return nil, fmt.Errorf("CCLIENTS_ARGON2_THREADS must be between 1 and 255, got %d", threads)
+	}
+	c.Argon2Threads = uint8(threads)
 	return c, nil
 }
 
@@ -102,6 +119,18 @@ func parseDuration(key, def string) (time.Duration, error) {
 		return 0, fmt.Errorf("%s must be positive, got %q", key, raw)
 	}
 	return d, nil
+}
+
+func parseUint32(key string, def uint32) (uint32, error) {
+	raw := getenv(key, strconv.FormatUint(uint64(def), 10))
+	n, err := strconv.ParseUint(raw, 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("%s is not a non-negative integer: %q", key, raw)
+	}
+	if n == 0 {
+		return 0, fmt.Errorf("%s must be positive, got %q", key, raw)
+	}
+	return uint32(n), nil
 }
 
 func parseBool(key string, def bool) (bool, error) {

@@ -98,9 +98,10 @@ standalone CLI):
 git clone https://github.com/CaffeinatedTech/caffeinated-clients
 cd caffeinated-clients
 export CCLIENTS_DB_KEY=$(head -c 32 /dev/urandom | base64)
-cp env.example .env            # or export the vars below
-go run . --bootstrap-admin     # initialise + migrate the encrypted database
-go run .
+export CCLIENTS_BOOTSTRAP_USERNAME=admin
+export CCLIENTS_BOOTSTRAP_PASSWORD='pick-a-long-passphrase'
+go run . --bootstrap-admin     # initialise + migrate, create the single user
+go run .                       # serve; log in and enrol TOTP at /setup
 ```
 
 Docker:
@@ -135,8 +136,11 @@ and no plaintext secret on disk outside the running process.
 | `CCLIENTS_TRUST_PROXY` | `false` | Set `true` behind Coolify so client IPs are real |
 | `CCLIENTS_LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
 | `CCLIENTS_BOOTSTRAP_USERNAME` | — | First-run only: create the single user |
-| `CCLIENTS_BOOTSTRAP_PASSWORD` | — | First-run only: initial password |
+| `CCLIENTS_BOOTSTRAP_PASSWORD` | — | First-run only: initial password (min 8 chars) |
 | `CCLIENTS_DISABLE_2FA` | `false` | Break-glass only; logs loudly and requires the password |
+| `CCLIENTS_ARGON2_MEMORY` | `65536` | Argon2id memory cost, in KiB |
+| `CCLIENTS_ARGON2_TIME` | `3` | Argon2id iterations |
+| `CCLIENTS_ARGON2_THREADS` | `4` | Argon2id parallelism |
 
 Generate a key:
 
@@ -218,14 +222,15 @@ container, installable on your phone.
 
 ## Status
 
-**Phase 1 complete** — Go module scaffold, environment config loader,
-the encrypted SQLCipher database (raw key, WAL, foreign keys,
-`cipher_memory_security`), embedded migrations with the full schema, a
-decrypting `GET /healthz`, structured logging with redaction, and the
-Docker/Compose build. The app currently serves only `/healthz`;
-authentication and the UI are Phase 2 onward in [PLAN.md](PLAN.md).
-`--bootstrap-admin` initialises and migrates the database; the
-single-user account itself is created in Phase 2.
+**Phase 2 complete** — authentication, sessions, and CSRF. The app now boots
+the single user from `CCLIENTS_BOOTSTRAP_USERNAME`/`CCLIENTS_BOOTSTRAP_PASSWORD`
+(or `--bootstrap-admin`), signs in with an Argon2id password plus TOTP (or a
+single-use recovery code), enforces TOTP enrollment at first login, and keeps
+sessions server-side with idle + absolute expiry. Every non-GET request is
+CSRF-checked, failed logins are rate-limited and audited, and
+`CCLIENTS_DISABLE_2FA=true` is a loud break-glass path. `/healthz` and a
+minimal signed-in landing page are served; the full app shell, theming, and
+PWA are Phase 3 onward in [PLAN.md](PLAN.md).
 
 ## License
 

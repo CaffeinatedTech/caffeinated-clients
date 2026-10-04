@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · caffeinated-clients</title>
+</head>
+<body>
+  <main>
+    <h1>Two-factor authentication</h1>
+    {{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
+    <p>Enter the 6-digit code from your authenticator app, or one of your recovery codes.</p>
+    <form method="post" action="/login/totp">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <p>
+        <label for="code">Code</label>
+        <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required autofocus>
+      </p>
+      <button type="submit">Verify</button>
+    </form>
+    <form method="post" action="/logout">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit">Cancel</button>
+    </form>
+  </main>
+</body>
+</html>
