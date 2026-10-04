@@ -105,6 +105,10 @@ encrypted CRM.
 - Migrations embedded and applied at startup.
 - `golang.org/x/crypto/argon2` for password hashing. TOTP implemented
   with stdlib `crypto/hmac` + `encoding/base32` + `crypto/rand`.
+- `rsc.io/qr` for the TOTP enrollment QR (encode-to-PNG only, zero module
+  dependencies, BSD-3-Clause, by the Go Authors). This is the one added
+  dependency: stdlib has no QR encoder, and a server-side render keeps the
+  `otpauth://` secret out of URLs and needs no client JS.
 - No JS framework; icons are inline SVG.
 - Go module path `github.com/CaffeinatedTech/caffeinated-clients`.
 - Image `ghcr.io/caffeinatedtech/caffeinated-clients`.
@@ -333,9 +337,11 @@ HTMX conventions:
   PHC hash. Recovery codes keep the planned Argon2id hashing.
   `--bootstrap-admin` and first-run auto-bootstrap both create the
   single user from the bootstrap env vars.
-- **Deferred:** a QR image for TOTP enrollment (the `<secret>` and
-  `otpauth://` URI are shown; a QR needs a decoder/generator dependency
-  or a client-side library — revisit in Phase 3 if wanted).
+- **Deferred resolved:** TOTP enrollment now renders a scannable QR of
+  the `otpauth://` URI inline (via `rsc.io/qr`, emitted as a
+  `data:image/png` URI already allowed by `img-src data:`) on `/setup`
+  and the Settings re-enrollment block, alongside the manual setup key.
+  No secret is written to a URL, log, or non-enrollment response.
 
 ### Phase 3 — App shell, theming, PWA
 

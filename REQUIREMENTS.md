@@ -66,7 +66,9 @@ There is no separate "credential" object. Secrets are notes with a flag.
 - F1.3 Passwords are hashed with Argon2id (sane default parameters,
   tunable via env) and never stored, logged, or returned in plaintext.
 - F1.4 Login requires password **and** a TOTP code. TOTP enrollment is
-  mandatory at first login, before any client data is shown.
+  mandatory at first login, before any client data is shown. The
+  enrollment screen offers a scannable QR of the `otpauth://` URI as well
+  as the manual setup key; the same QR is shown when re-enrolling.
 - F1.5 Ten single-use recovery codes are generated at enrollment,
   displayed exactly once, stored only as hashes, and accepted in place
   of a TOTP code.

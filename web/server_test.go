@@ -142,6 +142,9 @@ func TestPasswordThenTOTPEnrollmentThenHome(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /setup = %d", resp.StatusCode)
 	}
+	if !strings.Contains(body, "data:image/png;base64,") {
+		t.Fatal("GET /setup does not render a QR code")
+	}
 	var secret string
 	if err := db.QueryRow(`SELECT totp_secret FROM users`).Scan(&secret); err != nil {
 		t.Fatalf("read secret: %v", err)

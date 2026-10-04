@@ -4,11 +4,15 @@ package web
 
 import (
 	"embed"
+	"encoding/base64"
 	"html/template"
 	"io/fs"
+	"log/slog"
 	"path"
 	"strings"
 	"time"
+
+	"rsc.io/qr"
 )
 
 //go:embed templates/layout.html templates/partials/*.html templates/pages/*.html
@@ -40,6 +44,22 @@ var tmplFuncs = template.FuncMap{
 		return status != "done" && status != "archived" && !due.IsZero() &&
 			due.Format("2006-01-02") < time.Now().Format("2006-01-02")
 	},
+	"qr": qrPNG,
+}
+
+// qrPNG renders text (the otpauth:// URI) as an inline PNG QR data URI for the
+// enrollment pages. It returns template.URL so html/template does not filter
+// the data: URI (CSP already allows img-src data:), and the payload is a
+// library-generated module grid, never user text. Stdlib cannot encode QR;
+// rsc.io/qr is a zero-dependency, BSD-licensed encoder. The secret is only
+// rendered into the image, never logged.
+func qrPNG(text string) template.URL {
+	code, err := qr.Encode(text, qr.M)
+	if err != nil {
+		slog.Error("qr encode failed", "err", err)
+		return ""
+	}
+	return template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(code.PNG()))
 }
 
 // BuildVersion identifies the running build and versions the static-asset and
