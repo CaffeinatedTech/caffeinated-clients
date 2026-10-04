@@ -175,15 +175,20 @@ Changing it is a deliberate `PRAGMA rekey` operation (see PLAN.md).
 
 1. Create a resource from the GHCR image
    `ghcr.io/caffeinatedtech/caffeinated-clients:latest` (or build from
-   Git using the repo's Dockerfile).
+   Git using the repo's Dockerfile), or paste
+   [`deploy/coolify-compose.yml`](deploy/coolify-compose.yml) into a
+   Docker Compose resource for a pre-wired env/volume/healthcheck.
 2. Set the domain, e.g. `https://clients.example.com`, and enable
    Let's Encrypt. Coolify terminates TLS.
 3. Add a persistent volume mounted at `/data`.
-4. Set the environment: `CCLIENTS_BASE_URL`, `CCLIENTS_DB_KEY`,
-   `CCLIENTS_TRUST_PROXY=true`, and the two bootstrap vars.
-5. Set the health check path to `/healthz`, port `8080`.
-6. Deploy, log in, enroll TOTP, then delete the bootstrap vars and
-   redeploy.
+4. Set the environment: `CCLIENTS_BASE_URL` and `CCLIENTS_DB_KEY`
+   (`CCLIENTS_TRUST_PROXY=true` behind the proxy).
+5. Health check: use the image's built-in `CMD`
+   (`/caffeinated-clients --healthcheck`) — do **not** use an HTTP
+   `/healthz` check, because the distroless image has no `curl`/`wget`.
+6. Deploy and create the account passkey-first at `/register`; to use a
+   password instead, follow the bootstrap note in
+   [docs/DEPLOY.md](docs/DEPLOY.md).
 
 Full walkthrough — key generation and storage, backup and restore,
 break-glass recovery, and upgrades — is in

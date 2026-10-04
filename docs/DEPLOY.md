@@ -7,7 +7,7 @@ backups, restore, and recovery. Examples use synthetic values
 - [What you are deploying](#what-you-are-deploying)
 - [1. Generate and store the database key](#1-generate-and-store-the-database-key)
 - [2. Deploy on Coolify](#2-deploy-on-coolify)
-- [3. First login and TOTP enrollment](#3-first-login-and-totp-enrollment)
+- [3. First login](#3-first-login)
 - [4. Backups](#4-backups)
 - [5. Restore](#5-restore)
 - [6. Break-glass recovery](#6-break-glass-recovery)
@@ -52,59 +52,78 @@ Rules:
 
 ## 2. Deploy on Coolify
 
-1. **Create the resource.** New Resource → Docker image
+Deploy either by pasting the ready-made Compose file (recommended) or by
+filling in a Docker Image resource through the UI.
+
+### Option A — paste the Compose file (recommended)
+
+1. **Create the resource.** New Resource → Docker Compose Empty, or a
+   Git-based resource pointed at
+   [`deploy/coolify-compose.yml`](../deploy/coolify-compose.yml).
+2. **Paste** the contents of `deploy/coolify-compose.yml` and save. It
+   declares the environment variables, the `/data` volume, and the
+   health check; it publishes no `ports:` so nothing bypasses the proxy.
+3. **Set the domain** on the `app` service to e.g.
+   `https://clients.example.com:8080` — the `:8080` is the internal
+   container port Coolify routes to — and enable Let's Encrypt. Coolify
+   adds the proxy labels.
+4. **Fill the environment variables** Coolify creates from the file:
+   - `CCLIENTS_BASE_URL=https://clients.example.com`
+   - `CCLIENTS_DB_KEY=<the base64 key from step 1>`
+
+   `CCLIENTS_TRUST_PROXY` defaults to `true` in the file. The bootstrap
+   variables are commented out for the passkey-first path; see §3.
+5. **Deploy.** The health check comes from the Compose `healthcheck:`,
+   a `CMD` check that runs the binary's `--healthcheck` (a decrypting
+   database ping). Do **not** add an HTTP check: Compose resources
+   ignore Coolify's Healthcheck page, and Coolify's HTTP checks require
+   `curl`/`wget`, which the distroless image does not contain.
+
+### Option B — Docker Image resource (UI)
+
+1. New Resource → Docker image
    `ghcr.io/caffeinatedtech/caffeinated-clients:latest`, or deploy from
    this Git repository using its `Dockerfile`.
-2. **Set the domain** to e.g. `https://clients.example.com` and enable
-   Let's Encrypt. Coolify terminates TLS in front of the container.
-3. **Add a persistent volume** mounted at `/data`. Without it the
-   database lives in the container filesystem and is lost on redeploy.
-4. **Set the environment variables** (see the README table for the full
-   list). The minimum:
+2. Set the domain to `https://clients.example.com` and enable Let's
+   Encrypt.
+3. Add a persistent volume mounted at `/data`.
+4. Set `CCLIENTS_BASE_URL`, `CCLIENTS_DB_KEY`, and
+   `CCLIENTS_TRUST_PROXY=true` (see the README table for the full list).
+   The bootstrap variables are optional and passkey-first is preferred;
+   see §3.
+5. Health check: leave it disabled so the image's built-in
+   `HEALTHCHECK` applies, or set Coolify's type to **CMD** with command
+   `/caffeinated-clients --healthcheck`. Do **not** use an HTTP
+   `GET /healthz` check — the distroless image has no `curl`/`wget`.
+6. Deploy, then follow §3.
 
-   ```
-   CCLIENTS_BASE_URL=https://clients.example.com
-   CCLIENTS_DB_KEY=<the base64 key from step 1>
-   CCLIENTS_TRUST_PROXY=true
-   CCLIENTS_BOOTSTRAP_USERNAME=admin
-   CCLIENTS_BOOTSTRAP_PASSWORD=<a long passphrase>
-   ```
+## 3. First login
 
-   `CCLIENTS_TRUST_PROXY=true` is required behind Coolify so login rate
-   limiting sees the real client IP. Leave it `false` when exposing the
-   app directly.
+### Passkey-first (recommended)
 
-5. **Set the health check** to HTTP `GET /healthz` on port `8080`. The
-   endpoint returns 200 only when the database is open and decryptable.
-6. **Deploy.** Then follow step 3 to create the account and finish TOTP
-   enrollment, and **delete `CCLIENTS_BOOTSTRAP_USERNAME` /
-   `CCLIENTS_BOOTSTRAP_PASSWORD`** and redeploy.
+1. With no bootstrap variables set, open
+   `https://clients.example.com` and follow `/register`.
+2. Give the account a display name and register a passkey.
+3. Add more passkeys (e.g. phone and laptop) in **Settings →
+   Passkeys**, and keep the ten one-time recovery codes safe. They are
+   shown once, stored only as hashes, and are the break-glass if every
+   passkey is lost.
 
-## 3. First login and TOTP enrollment
+Passkeys require HTTPS and a real hostname: a bare IP does not work, and
+changing `CCLIENTS_BASE_URL` to a different host invalidates existing
+passkeys (password/recovery login still works).
 
-1. Open `https://clients.example.com` and sign in with the bootstrap
-   credentials.
-2. The first login forces TOTP enrollment at `/setup`. Add the setup key
-   to your authenticator app, enter the code, and save the ten one-time
-   recovery codes shown. **They are displayed once and stored only as
-   hashes.**
-3. Remove the two bootstrap environment variables in Coolify and
-   redeploy.
+### Password + TOTP (alternative)
 
-From then on, login is password + authenticator code, or a single-use
-recovery code.
+To create a password account instead, uncomment (or set) both
+`CCLIENTS_BOOTSTRAP_USERNAME` and `CCLIENTS_BOOTSTRAP_PASSWORD` (min 8
+chars) and redeploy. Sign in with them; the first login forces TOTP
+enrollment at `/setup` — add the setup key to your authenticator app,
+enter the code, and save the ten one-time recovery codes. Then **delete
+both bootstrap variables and redeploy.**
 
-### Passkey-first alternative
-
-Instead of the bootstrap variables, you can create the account with a
-passkey: deploy with `CCLIENTS_BASE_URL` set to the real HTTPS host and no
-bootstrap credentials, open the site, and follow `/register` — give it a
-display name and register a passkey. Add more passkeys (e.g. phone and
-laptop) in **Settings → Passkeys**; a passkey-only account has no password
-and no TOTP. Keep the recovery codes safe, as they are the break-glass if
-every passkey is lost. Passkeys require HTTPS and a hostname: a bare IP
-does not work, and changing `CCLIENTS_BASE_URL` to a different host
-invalidates existing passkeys.
+From then on, password login requires an authenticator code or a
+single-use recovery code.
 
 ## 4. Backups
 

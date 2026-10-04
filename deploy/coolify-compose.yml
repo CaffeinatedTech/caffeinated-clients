@@ -1,0 +1,52 @@
+# Coolify deployment for caffeinated-clients.
+#
+# Paste this into a Coolify "Docker Compose Empty" resource (or point a
+# Git-based Docker Compose resource at it). The root docker-compose.yml
+# is a local/dev convenience; this is the Coolify-shaped one:
+#   - no published `ports:` — Coolify's proxy routes to :8080
+#   - `${VAR}` references become editable Coolify environment variables
+#   - bootstrap credentials are commented out for the passkey-first path
+#
+# Set the service domain in Coolify to e.g.
+# https://clients.example.com:8080 (the :8080 is the internal container
+# port Coolify proxies to).
+
+services:
+  app:
+    image: ghcr.io/caffeinatedtech/caffeinated-clients:latest
+    restart: unless-stopped
+    environment:
+      # Required. Public HTTPS URL; also the passkey relying-party
+      # ID/origin, so changing the host invalidates existing passkeys.
+      CCLIENTS_BASE_URL: ${CCLIENTS_BASE_URL:?}
+      # Required. Base64 32-byte SQLCipher key. Losing it is permanent
+      # data loss. Enter it in Coolify's Environment Variables; never
+      # commit it.
+      CCLIENTS_DB_KEY: ${CCLIENTS_DB_KEY:?}
+      # true behind Coolify's proxy so login rate limiting sees the
+      # real client IP.
+      CCLIENTS_TRUST_PROXY: ${CCLIENTS_TRUST_PROXY:-true}
+      CCLIENTS_RP_DISPLAY_NAME: ${CCLIENTS_RP_DISPLAY_NAME:-caffeinated-clients}
+      CCLIENTS_LOG_LEVEL: ${CCLIENTS_LOG_LEVEL:-info}
+      # Password + TOTP path only: uncomment BOTH before the first
+      # deploy, then remove them and redeploy once the account exists.
+      # Leave commented to create the account passkey-first at /register.
+      # CCLIENTS_BOOTSTRAP_USERNAME: ${CCLIENTS_BOOTSTRAP_USERNAME:-admin}
+      # CCLIENTS_BOOTSTRAP_PASSWORD: ${CCLIENTS_BOOTSTRAP_PASSWORD:-}
+      # Break-glass only: skips the TOTP step (password still required).
+      # CCLIENTS_DISABLE_2FA: ${CCLIENTS_DISABLE_2FA:-false}
+    volumes:
+      - cclients-data:/data
+    # Coolify Compose resources take the health check from the Compose
+    # service; the UI Healthcheck page does not apply. This CMD check
+    # runs the binary's decrypting database ping and needs no shell,
+    # curl, or wget — all absent from the distroless image.
+    healthcheck:
+      test: ["CMD", "/caffeinated-clients", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  cclients-data:
