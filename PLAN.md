@@ -146,7 +146,7 @@ clients    (id, name, status, website, address, phone, phone_digits,
             summary, tags, created_at, updated_at, archived_at)
 contacts   (id, client_id, name, role, phone, phone_digits, email,
             notes, is_primary, created_at, updated_at)
-notes      (id, client_id, title, body, pinned, is_secret,
+notes      (id, client_id, job_id, title, body, pinned, is_secret,
             created_at, updated_at)
 projects   (id, client_id, name, description, status, due_date,
             started_at, completed_at, created_at, updated_at)
@@ -170,6 +170,10 @@ Notes:
 - There is **no `secrets` table**. Secret notes are `notes` rows with
   `is_secret = 1`. The TOTP secret is the one non-note secret and lives
   on `users`, still protected by whole-database encryption.
+- A job note is a `notes` row with `job_id` set (F7.6); it keeps its
+  job's `client_id`, so ownership checks and the audit client are
+  unchanged. `job_id IS NULL` marks a client-level note, and deleting a
+  job cascades to its notes (`ON DELETE CASCADE`).
 - A passkey is not a secret: `webauthn_credentials` stores only the
   public key, the credential ID, and authenticator metadata (flags,
   counter, AAGUID, transports). `users.password_hash = ''` marks a
@@ -184,7 +188,7 @@ Notes:
 - Indexes: `clients(name)`, `clients(phone_digits)`,
   `contacts(phone_digits)`, `contacts(client_id)`,
   `contacts(client_id) WHERE is_primary = 1` (unique), `notes(client_id)`,
-  `notes(title)`, `projects(client_id, status)`, `projects(name)`,
+  `notes(job_id)`, `notes(title)`, `projects(client_id, status)`, `projects(name)`,
   `jobs(client_id, status, due_date)`, `jobs(project_id)`,
   `sessions(token_hash)`, `audit_log(at)`, `audit_log(client_id)`.
   Secret-note rows are excluded from search at query time
@@ -221,6 +225,7 @@ POST /clients/{id}/delete  cascade delete (confirm)
 POST /notes/{id}/reveal    reveal a secret note (audited, no-store)
 GET  /projects  /projects/{id}
 GET  /jobs      /jobs/{id}
+POST /jobs/{id}/notes[/{nid}[/pin|/secret|/delete]]  job notes (F7.6)
 GET  /settings             password, 2FA, passkeys, export, audit
 POST /settings/passkeys/begin | finish  add a passkey (re-auth if password set)
 POST /settings/passkeys/{id}/rename | delete  manage passkeys (last one guarded)
@@ -572,6 +577,29 @@ HTMX conventions:
   required within a short window for credential changes. Adding a
   password to a passkey-only account (and re-adding TOTP) is out of scope
   for this phase: the account model is chosen at registration.
+
+### Phase 9 — Job notes
+
+- [x] Migration `0005_job_notes.sql`: nullable `notes.job_id`
+      (`ON DELETE CASCADE`) + index.
+- [x] Job notes in `internal/crm`: `ListJobNotes`, `CreateNote` accepts a
+      `JobID` (same-client rule enforced at the store), `ListNotes` hides
+      job notes; search links a job note to its job.
+- [x] Job page notes panel, reusing the client notes panel and the
+      audited secret reveal; job-scoped note routes.
+- [x] Tests: store (job-note scoping, same-client rule, cascade on job
+      delete) and HTTP (render, secret masking, reveal scope, cascade).
+- **Decisions landed:** a job note is not a new object — it is a `notes`
+  row with `job_id` set, so it inherits pin, secret masking, the audited
+  no-store reveal, search exclusion, and the plaintext-export exclusion
+  for free (F7.6, and the "secrets are notes with a flag" rule). The
+  note handlers are scope-aware: they read the path `{id}` as a client,
+  or as a job when the matched route is job-scoped, and render the same
+  `notes_panel` partial with a `NotesBase` URL prefix (`/clients/5` or
+  `/jobs/9`). Job notes appear only on the job page and cascade away with
+  the job (both confirmed with the operator). `notes.client_id` is
+  retained on job notes, so the existing client-ownership checks and the
+  client cascade need no special case.
 
 ### Later / explicitly out of scope for v1
 

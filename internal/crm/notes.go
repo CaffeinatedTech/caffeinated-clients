@@ -8,12 +8,16 @@ import (
 	"time"
 )
 
-// Note is one note attached to a client. A secret note (IsSecret) is masked in
-// every ordinary render and revealable only through the audited endpoint; the
-// stored body is identical whether or not the flag is set (F4.1, F5.1).
+// Note is one note attached to a client. JobID is set when the note belongs to
+// a job instead of the client directly (F7.6); a job note keeps its job's
+// client_id so ownership checks stay the same. A secret note (IsSecret) is
+// masked in every ordinary render and revealable only through the audited
+// endpoint; the stored body is identical whether or not the flag is set
+// (F4.1, F5.1).
 type Note struct {
 	ID        int64
 	ClientID  int64
+	JobID     int64
 	Title     string
 	Body      string
 	Pinned    bool
@@ -22,22 +26,46 @@ type Note struct {
 	UpdatedAt time.Time
 }
 
-// NoteInput is the editable set of note fields for creation. Edits update only
-// the title and body: pinning and the secret flag are toggled by their own
-// actions, so editing a note can never clear the secret treatment (F4.6).
+// NoteInput is the editable set of note fields for creation. JobID attaches the
+// new note to a job and is only read on create; edits update only the title and
+// body. Pinning and the secret flag are toggled by their own actions, so editing
+// a note can never clear the secret treatment (F4.6).
 type NoteInput struct {
 	Title    string
 	Body     string
 	IsSecret bool
+	JobID    int64
 }
 
-const noteColumns = `id, client_id, title, body, pinned, is_secret, created_at, updated_at`
+const noteColumns = `id, client_id, title, body, pinned, is_secret, created_at, updated_at, COALESCE(job_id, 0)`
 
-// ListNotes returns a client's notes, pinned first then most recently updated.
+// ListNotes returns a client's own notes (not its jobs'), pinned first then most
+// recently updated.
 func (s *Store) ListNotes(ctx context.Context, clientID int64) ([]Note, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+noteColumns+` FROM notes WHERE client_id = ?
+		`SELECT `+noteColumns+` FROM notes WHERE client_id = ? AND job_id IS NULL
 		 ORDER BY pinned DESC, updated_at DESC`, clientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Note
+	for rows.Next() {
+		n, err := scanNote(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// ListJobNotes returns a job's notes, pinned first then most recently updated
+// (F7.6).
+func (s *Store) ListJobNotes(ctx context.Context, jobID int64) ([]Note, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+noteColumns+` FROM notes WHERE job_id = ?
+		 ORDER BY pinned DESC, updated_at DESC`, jobID)
 	if err != nil {
 		return nil, err
 	}
@@ -64,13 +92,30 @@ func (s *Store) GetNote(ctx context.Context, id int64) (Note, error) {
 }
 
 // CreateNote inserts a note for a client. Only the title and body are editable;
-// the optional secret flag is set at creation (F4.1/F5.1).
+// the optional secret flag is set at creation (F4.1/F5.1). When JobID is set the
+// note becomes a job note and the job must belong to clientID (F7.6), enforced
+// here rather than only in the UI.
 func (s *Store) CreateNote(ctx context.Context, clientID int64, in NoteInput) (int64, error) {
+	var jobID any
+	if in.JobID != 0 {
+		var jobClient int64
+		err := s.db.QueryRowContext(ctx, `SELECT client_id FROM jobs WHERE id = ?`, in.JobID).Scan(&jobClient)
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrInvalidInput
+		}
+		if err != nil {
+			return 0, err
+		}
+		if jobClient != clientID {
+			return 0, ErrInvalidInput
+		}
+		jobID = in.JobID
+	}
 	now := formatTS(time.Now())
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO notes (client_id, title, body, is_secret, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		clientID, strings.TrimSpace(in.Title), in.Body, boolInt(in.IsSecret), now, now)
+		`INSERT INTO notes (client_id, job_id, title, body, is_secret, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		clientID, jobID, strings.TrimSpace(in.Title), in.Body, boolInt(in.IsSecret), now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -128,7 +173,7 @@ func scanNote(sc scanner) (Note, error) {
 		pinned, secret   int
 		created, updated string
 	)
-	if err := sc.Scan(&n.ID, &n.ClientID, &n.Title, &n.Body, &pinned, &secret, &created, &updated); err != nil {
+	if err := sc.Scan(&n.ID, &n.ClientID, &n.Title, &n.Body, &pinned, &secret, &created, &updated, &n.JobID); err != nil {
 		return Note{}, err
 	}
 	n.Pinned = pinned == 1

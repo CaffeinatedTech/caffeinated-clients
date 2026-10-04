@@ -677,7 +677,7 @@ func (s *Store) searchProjects(ctx context.Context, text string, limit int) ([]H
 
 func (s *Store) searchNotes(ctx context.Context, text string, limit int) ([]Hit, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT n.id, n.title, cl.id, cl.name
+		`SELECT n.id, n.title, cl.id, cl.name, COALESCE(n.job_id, 0)
 		 FROM notes n JOIN clients cl ON cl.id = n.client_id
 		 WHERE n.is_secret = 0 AND n.title <> '' AND n.title LIKE ?
 		 ORDER BY n.title COLLATE NOCASE ASC LIMIT ?`, text, limit)
@@ -688,12 +688,16 @@ func (s *Store) searchNotes(ctx context.Context, text string, limit int) ([]Hit,
 	var out []Hit
 	for rows.Next() {
 		var h Hit
-		if err := rows.Scan(&h.ID, &h.Title, &h.ClientID, &h.ClientName); err != nil {
+		var jobID int64
+		if err := rows.Scan(&h.ID, &h.Title, &h.ClientID, &h.ClientName, &jobID); err != nil {
 			return nil, err
 		}
 		h.Kind = "note"
 		h.Subtitle = "note · " + h.ClientName
 		h.Href = fmt.Sprintf("/clients/%d", h.ClientID)
+		if jobID != 0 {
+			h.Href = fmt.Sprintf("/jobs/%d", jobID)
+		}
 		out = append(out, h)
 	}
 	return out, rows.Err()

@@ -353,6 +353,7 @@ func (s *Server) clientPageData(r *http.Request, sess *auth.Session, client crm.
 		Contacts:  contacts,
 		Counts:    counts,
 		Tab:       tab,
+		NotesBase: fmt.Sprintf("/clients/%d", client.ID),
 	}
 	for i := range contacts {
 		if contacts[i].IsPrimary {
@@ -392,20 +393,6 @@ func (s *Server) clientPageData(r *http.Request, sess *auth.Session, client crm.
 			return pageData{}, err
 		}
 		data.Audit = audit
-	}
-	return data, nil
-}
-
-// notePanelData builds the notes panel view model, reusing the client page data
-// so the same panel renders on the client page and as an HTMX fragment.
-func (s *Server) notePanelData(r *http.Request, sess *auth.Session, clientID int64) (pageData, error) {
-	client, err := s.crm.GetClient(r.Context(), clientID)
-	if err != nil {
-		return pageData{}, err
-	}
-	data, err := s.clientPageData(r, sess, client, "notes", "")
-	if err != nil {
-		return pageData{}, err
 	}
 	return data, nil
 }

@@ -134,6 +134,92 @@ func TestNoteSecretRevealFlow(t *testing.T) {
 	}
 }
 
+// TestJobNotesHTTP covers F7.6 over HTTP: job notes render on the job page,
+// a secret body never leaks, the reveal fragment posts back to the job scope,
+// job notes stay out of the client notes tab, and deleting the job removes them.
+func TestJobNotesHTTP(t *testing.T) {
+	ts, db, _, _ := newTestServer(t, func(c *config.Config) { c.Disable2FA = true })
+	c := newClient(t)
+	loginPassword(t, c, ts)
+	csrf := csrfFromDB(t, db, auth.StageFull)
+
+	if resp, _ := postForm(t, c, ts.URL+"/clients", url.Values{"csrf_token": {csrf}, "name": {"Acme Co"}}); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("create client = %d", resp.StatusCode)
+	}
+	var clientID int64
+	if err := db.QueryRow(`SELECT id FROM clients LIMIT 1`).Scan(&clientID); err != nil {
+		t.Fatal(err)
+	}
+	if resp, _ := postForm(t, c, ts.URL+"/jobs", url.Values{
+		"csrf_token": {csrf}, "client_id": {itoa(clientID)}, "title": {"Fix DNS"},
+	}); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("create job = %d, want 303", resp.StatusCode)
+	}
+	var jobID int64
+	if err := db.QueryRow(`SELECT id FROM jobs LIMIT 1`).Scan(&jobID); err != nil {
+		t.Fatal(err)
+	}
+	jobLoc := "/jobs/" + itoa(jobID)
+
+	// One untitled note and one secret note.
+	if resp, _ := postForm(t, c, ts.URL+jobLoc+"/notes", url.Values{
+		"csrf_token": {csrf}, "body": {"ping gateway"},
+	}); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("job note create = %d, want 303", resp.StatusCode)
+	}
+	if resp, _ := postForm(t, c, ts.URL+jobLoc+"/notes", url.Values{
+		"csrf_token": {csrf}, "title": {"Router"}, "body": {"SecretBody"}, "is_secret": {"1"},
+	}); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("secret job note create = %d, want 303", resp.StatusCode)
+	}
+
+	// The job page shows the public body and never the secret body.
+	resp, body := get(t, c, ts.URL+jobLoc)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "ping gateway") {
+		t.Fatalf("job page = %d, missing job note body", resp.StatusCode)
+	}
+	if strings.Contains(body, "SecretBody") {
+		t.Fatalf("secret job note body leaked into the job page")
+	}
+
+	// Job notes stay off the client's own notes tab (F7.6).
+	if _, cbody := get(t, c, ts.URL+"/clients/"+itoa(clientID)+"?tab=notes"); strings.Contains(cbody, "ping gateway") {
+		t.Fatalf("job note leaked into the client notes tab")
+	}
+
+	// Reveal returns the body and its editor targets the job scope.
+	var secretID int64
+	if err := db.QueryRow(`SELECT id FROM notes WHERE is_secret = 1`).Scan(&secretID); err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest("POST", ts.URL+"/notes/"+itoa(secretID)+"/reveal", strings.NewReader("csrf_token="+url.QueryEscape(csrf)))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("HX-Request", "true")
+	rresp, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rb := readBody(t, rresp)
+	if rresp.StatusCode != http.StatusOK || !strings.Contains(rb, "SecretBody") {
+		t.Fatalf("job secret reveal = %d, body=%q", rresp.StatusCode, rb)
+	}
+	if !strings.Contains(rb, jobLoc+"/notes/"+itoa(secretID)) {
+		t.Fatalf("reveal editor does not post back to the job scope: %q", rb)
+	}
+
+	// Deleting the job cascades to its notes.
+	if resp, _ := postForm(t, c, ts.URL+jobLoc+"/delete", url.Values{"csrf_token": {csrf}}); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("delete job = %d, want 303", resp.StatusCode)
+	}
+	var remaining int
+	if err := db.QueryRow(`SELECT count(*) FROM notes WHERE job_id = ?`, jobID).Scan(&remaining); err != nil {
+		t.Fatal(err)
+	}
+	if remaining != 0 {
+		t.Fatalf("job notes after job delete = %d, want 0", remaining)
+	}
+}
+
 func itoa(n int64) string {
 	return strconv.FormatInt(n, 10)
 }

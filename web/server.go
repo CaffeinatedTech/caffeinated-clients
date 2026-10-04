@@ -153,6 +153,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /jobs/{id}", s.requireFull(s.handleJobShow))
 	mux.HandleFunc("POST /jobs/{id}", s.requireFull(s.requireCSRF(s.handleJobUpdate)))
 	mux.HandleFunc("POST /jobs/{id}/delete", s.requireFull(s.requireCSRF(s.handleJobDelete)))
+	// Job notes reuse the note handlers and the notes panel; the handler reads
+	// the {id} as a job when the matched route is job-scoped (F7.6).
+	mux.HandleFunc("POST /jobs/{id}/notes", s.requireFull(s.requireCSRF(s.handleNoteCreate)))
+	mux.HandleFunc("POST /jobs/{id}/notes/{nid}", s.requireFull(s.requireCSRF(s.handleNoteUpdate)))
+	mux.HandleFunc("POST /jobs/{id}/notes/{nid}/pin", s.requireFull(s.requireCSRF(s.handleNotePin)))
+	mux.HandleFunc("POST /jobs/{id}/notes/{nid}/secret", s.requireFull(s.requireCSRF(s.handleNoteSecret)))
+	mux.HandleFunc("POST /jobs/{id}/notes/{nid}/delete", s.requireFull(s.requireCSRF(s.handleNoteDelete)))
 
 	mux.HandleFunc("GET /settings", s.requireFull(s.handleSettings))
 	mux.HandleFunc("POST /settings/password", s.requireFull(s.requireCSRF(s.handlePasswordChange)))
@@ -394,10 +401,13 @@ type pageData struct {
 	ContactForm    crm.ContactInput
 	ContactFormID  int64
 
-	// Phase 5 notes and audit view model.
-	Notes []crm.Note
-	Note  crm.Note
-	Audit []auth.AuditRecord
+	// Phase 5 notes and audit view model. NotesBase is the URL prefix note
+	// actions hang off ("/clients/5" or "/jobs/9"), so the same notes panel
+	// renders for a client and for a job (F7.6).
+	Notes     []crm.Note
+	Note      crm.Note
+	NotesBase string
+	Audit     []auth.AuditRecord
 
 	// Phase 7 settings view model. Secret/OTPAuthURL/Codes are reused from the
 	// enrollment flow to show a pending authenticator or freshly generated

@@ -35,12 +35,14 @@ Android phone as a PWA with light and dark themes.
   environment. A copied database file, and any backup of it, is inert
   without the key.
 - **Secret notes with tap-to-reveal.** Any note can be flagged as a
-  secret. Secret notes are masked everywhere — lists, search, and the
-  client page — and shown only when you tap reveal. They re-mask after
-  15 seconds, and every reveal is written to the audit log.
+  secret. Secret notes are masked everywhere — lists, search, the client
+  page, and the job page — and shown only when you tap reveal. They
+  re-mask after 15 seconds, and every reveal is written to the audit log.
 - **Projects and jobs.** Long-running work lives on the dashboard; jobs
   are the discrete bits of work that roll up to a project or stand
-  alone.
+  alone. A job has its own notes for what you find while working it —
+  each one optionally titled and optionally secret — kept on the job and
+  deleted with it.
 - **Passkeys, with password + TOTP as an option.** Sign in with a
   passkey (WebAuthn) — no shared secret, phishing-resistant — or create a
   password account that requires an authenticator-app code. One-time

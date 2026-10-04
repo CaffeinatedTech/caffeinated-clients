@@ -155,9 +155,10 @@ There is no separate "credential" object. Secrets are notes with a flag.
 
 ### F4 — Notes
 
-- F4.1 Notes are attached to a client and have a title, a body
-  (plain text or minimal Markdown rendered safely), a pinned flag, and
-  a secret flag.
+- F4.1 Notes are attached to a client, or to one of that client's jobs
+  (F7.6), and have a title, a body (plain text or minimal Markdown
+  rendered safely), a pinned flag, and a secret flag. A note's title is
+  optional.
 - F4.2 Pinned notes sort first on the client page and can surface on
   the dashboard.
 - F4.3 Notes support create, edit, pin/unpin, toggle secret, and
@@ -175,8 +176,8 @@ There is no separate "credential" object. Secrets are notes with a flag.
 - F5.1 Any note can be flagged as a secret. There is no separate
   credential object and no separate secret table.
 - F5.2 Secret notes are masked everywhere they appear: client lists,
-  search results, the Activity feed, and the client page. Masking shows
-  the title and metadata but not the body.
+  search results, the Activity feed, the client page, and the job page.
+  Masking shows the title and metadata but not the body.
 - F5.3 Revealing a secret note requires an explicit tap. As soon as the
   user taps reveal, the body is shown; there is no confirmation dialog.
   The revealed body re-masks after 15 seconds (auto-hide).
@@ -220,6 +221,11 @@ There is no separate "credential" object. Secrets are notes with a flag.
   view filters by status, client, project, and due window.
 - F7.5 Marking a job done records a completion timestamp; reopening
   clears it.
+- F7.6 A job has its own notes: individual notes captured while working
+  the job, each optionally titled and optionally secret. Job notes reuse
+  the note fields and rules (F4/F5) and the audited secret reveal, appear
+  only on the job page (not mixed into the client's Notes tab), and are
+  deleted with the job. A job note's client is always its job's client.
 
 ### F8 — Dashboard and search
 

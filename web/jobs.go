@@ -278,6 +278,10 @@ func (s *Server) jobPageData(r *http.Request, sess *auth.Session, j crm.Job, for
 	if err != nil {
 		return pageData{}, err
 	}
+	notes, err := s.crm.ListJobNotes(r.Context(), j.ID)
+	if err != nil {
+		return pageData{}, err
+	}
 	return pageData{
 		Title:     j.Title,
 		Error:     errMsg,
@@ -288,6 +292,8 @@ func (s *Server) jobPageData(r *http.Request, sess *auth.Session, j crm.Job, for
 		Job:       j,
 		Projects:  projects,
 		JobForm:   jobFormView(form),
+		Notes:     notes,
+		NotesBase: fmt.Sprintf("/jobs/%d", j.ID),
 	}, nil
 }
 
