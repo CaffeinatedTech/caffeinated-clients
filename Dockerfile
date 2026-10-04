@@ -10,12 +10,13 @@ WORKDIR /src
 
 ARG VERSION=dev
 
-# Tailwind standalone CLI (no Node). Pick the release matching the build arch.
+# Tailwind standalone CLI (no Node). Alpine is musl, so fetch the musl build
+# matching the architecture; the glibc binary fails to exec here (exit 127).
 ARG TAILWINDCSS_VERSION=v4.1.11
 RUN arch="$(uname -m)"; \
     case "$arch" in \
-      x86_64) tw=x64 ;; \
-      aarch64|arm64) tw=arm64 ;; \
+      x86_64) tw=x64-musl ;; \
+      aarch64|arm64) tw=arm64-musl ;; \
       *) echo "unsupported architecture: $arch" >&2; exit 1 ;; \
     esac; \
     wget -qO /usr/local/bin/tailwindcss \
