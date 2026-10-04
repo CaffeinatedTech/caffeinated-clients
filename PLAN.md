@@ -248,7 +248,7 @@ HTMX conventions:
     `-ldflags '-linkmode external -extldflags "-static"'` so the
     SQLCipher binary is fully static (SQLCipher bundles its own crypto,
     so no OpenSSL).
-  - Stage 2: `gcr.io/distroless/static-debian12:non-root` — copy the
+  - Stage 2: `gcr.io/distroless/static-debian12:nonroot` — copy the
     static binary and embedded assets only. No shell.
 - **Runtime:** listens on `:8080`, reads/writes `/data`, exposes
   `/healthz`.
