@@ -5,8 +5,8 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"errors"
-	"html/template"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -37,7 +37,8 @@ type Server struct {
 	cfg     *config.Config
 	log     *slog.Logger
 	db      *sql.DB
-	tmpl    *template.Template
+	tmpl    pageTemplates
+	static  fs.FS
 	limiter *auth.Limiter
 }
 
@@ -47,13 +48,21 @@ func New(svc *auth.Service, cfg *config.Config, log *slog.Logger, db *sql.DB) (*
 	if err != nil {
 		return nil, err
 	}
-	return &Server{svc: svc, cfg: cfg, log: log, db: db, tmpl: tmpl, limiter: auth.NewLimiter()}, nil
+	static, err := staticSub()
+	if err != nil {
+		return nil, err
+	}
+	return &Server{svc: svc, cfg: cfg, log: log, db: db, tmpl: tmpl, static: static, limiter: auth.NewLimiter()}, nil
 }
 
 // Handler returns the routed, middleware-wrapped http.Handler.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
+	mux.Handle("GET /static/", s.assetHandler())
+	mux.HandleFunc("GET /manifest.webmanifest", s.handleManifest)
+	mux.HandleFunc("GET /sw.js", s.handleServiceWorker)
+	mux.HandleFunc("GET /offline", s.handleOffline)
 	mux.HandleFunc("GET /login", s.requireAnonymous(s.handleLoginPage))
 	mux.HandleFunc("POST /login", s.requireCSRF(s.handleLoginPost))
 	mux.HandleFunc("GET /login/totp", s.requirePending(s.handleTOTPPage))
@@ -62,7 +71,25 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /setup", s.requirePending(s.requireCSRF(s.handleSetupPost)))
 	mux.HandleFunc("POST /logout", s.requireFull(s.requireCSRF(s.handleLogout)))
 	mux.HandleFunc("GET /", s.requireFull(s.handleHome))
-	return mux
+	mux.HandleFunc("GET /clients", s.requireFull(s.handleSection("Clients", "clients")))
+	mux.HandleFunc("GET /projects", s.requireFull(s.handleSection("Projects", "projects")))
+	mux.HandleFunc("GET /jobs", s.requireFull(s.handleSection("Jobs", "jobs")))
+	mux.HandleFunc("GET /settings", s.requireFull(s.handleSection("Settings", "settings")))
+	return securityHeaders(mux)
+}
+
+// securityHeaders applies the F11.7/S7 headers to every response. The theme
+// bootstrap is an external script and no inline styles are used, so the CSP
+// needs no unsafe-inline.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; form-action 'self'; manifest-src 'self'")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "same-origin")
+		h.Set("X-Frame-Options", "DENY")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // --- middleware ---------------------------------------------------------
@@ -249,23 +276,90 @@ func (s *Server) clientIP(r *http.Request) string {
 // --- rendering and health ----------------------------------------------
 
 type pageData struct {
-	Title      string
-	Error      string
-	CSRFToken  string
-	Username   string
-	Secret     string
-	OTPAuthURL string
-	Codes      []string
-	User       auth.User
+	Title        string
+	Error        string
+	CSRFToken    string
+	Username     string
+	Secret       string
+	OTPAuthURL   string
+	Codes        []string
+	User         auth.User
+	Authed       bool
+	Active       string
+	AssetVersion string
 }
 
 func (s *Server) render(w http.ResponseWriter, status int, name string, data pageData) {
+	t, ok := s.tmpl[name]
+	if !ok {
+		s.log.Error("unknown template", "template", name)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if data.AssetVersion == "" {
+		data.AssetVersion = BuildVersion
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
-	if err := s.tmpl.ExecuteTemplate(w, name, data); err != nil {
+	if err := t.ExecuteTemplate(w, "layout", data); err != nil {
 		s.log.Error("template render failed", "template", name, "err", err)
 	}
+}
+
+// --- static assets and PWA ----------------------------------------------
+
+// assetHandler serves embedded static files. Assets are versioned by query
+// string and safe to cache immutably; the service worker versions its cache by
+// BuildVersion and drops old caches on activate.
+func (s *Server) assetHandler() http.Handler {
+	files := http.StripPrefix("/static/", http.FileServerFS(s.static))
+	// Real builds set BuildVersion (e.g. a git sha) so the ?v= URL changes and
+	// immutable caching is safe. The dev build keeps a stable URL, so it must
+	// revalidate or local edits would be pinned in the browser cache.
+	cache := "public, max-age=31536000, immutable"
+	if BuildVersion == "dev" {
+		cache = "no-cache"
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", cache)
+		files.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
+	body, err := fs.ReadFile(s.static, "manifest.webmanifest")
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/manifest+json")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Write(body)
+}
+
+// handleServiceWorker serves sw.js with the build version substituted so a new
+// deploy produces a byte-different worker that browsers pick up.
+func (s *Server) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
+	s.serveVersioned(w, "sw.js", "text/javascript; charset=utf-8", true)
+}
+
+func (s *Server) handleOffline(w http.ResponseWriter, r *http.Request) {
+	s.serveVersioned(w, "offline.html", "text/html; charset=utf-8", false)
+}
+
+func (s *Server) serveVersioned(w http.ResponseWriter, name, contentType string, sw bool) {
+	body, err := fs.ReadFile(s.static, name)
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "no-cache")
+	if sw {
+		w.Header().Set("Service-Worker-Allowed", "/")
+	}
+	io.WriteString(w, strings.ReplaceAll(string(body), "__BUILD_VERSION__", BuildVersion))
 }
 
 func (s *Server) serverError(w http.ResponseWriter, err error) {
@@ -529,10 +623,27 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	sess := sessionFrom(r.Context())
 	s.render(w, http.StatusOK, "home.html", pageData{
-		Title:     "Home",
+		Title:     "Dashboard",
 		CSRFToken: sess.CSRFToken,
 		User:      sess.User,
+		Authed:    true,
+		Active:    "home",
 	})
+}
+
+// handleSection renders a placeholder inside the app shell for a section whose
+// features land in a later phase, so the shell's navigation is coherent.
+func (s *Server) handleSection(title, active string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sess := sessionFrom(r.Context())
+		s.render(w, http.StatusOK, "section.html", pageData{
+			Title:     title,
+			CSRFToken: sess.CSRFToken,
+			User:      sess.User,
+			Authed:    true,
+			Active:    active,
+		})
+	}
 }
 
 // newFullSession issues a completed session and sets its cookie.

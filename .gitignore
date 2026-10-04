@@ -16,7 +16,9 @@ backup-*.db
 # Build output
 /caffeinated-clients
 /bin/
-web/static/app.css
+
+# web/static/app.css is committed (no Node/Tailwind needed for a plain
+# `go build`); regenerate it with `make css` after template changes.
 
 # OS / editor
 .DS_Store

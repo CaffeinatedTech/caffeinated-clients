@@ -91,8 +91,9 @@ static against musl with no OpenSSL. The earlier candidate
 
 ## Quick start
 
-Local (needs Go and a C toolchain for SQLCipher, plus the Tailwind
-standalone CLI):
+Local (needs Go and a C toolchain for SQLCipher; the compiled
+`web/static/app.css` is committed, so the Tailwind CLI is only needed
+after changing templates — `make css`):
 
 ```sh
 git clone https://github.com/CaffeinatedTech/caffeinated-clients
@@ -222,15 +223,17 @@ container, installable on your phone.
 
 ## Status
 
-**Phase 2 complete** — authentication, sessions, and CSRF. The app now boots
-the single user from `CCLIENTS_BOOTSTRAP_USERNAME`/`CCLIENTS_BOOTSTRAP_PASSWORD`
-(or `--bootstrap-admin`), signs in with an Argon2id password plus TOTP (or a
-single-use recovery code), enforces TOTP enrollment at first login, and keeps
-sessions server-side with idle + absolute expiry. Every non-GET request is
-CSRF-checked, failed logins are rate-limited and audited, and
-`CCLIENTS_DISABLE_2FA=true` is a loud break-glass path. `/healthz` and a
-minimal signed-in landing page are served; the full app shell, theming, and
-PWA are Phase 3 onward in [PLAN.md](PLAN.md).
+**Phase 3 complete** — app shell, theming, and PWA. Every page now renders
+through a shared `html/template` layout (app bar, bottom navigation, skip
+link) with Tailwind CSS compiled from the templates, light/dark themes that
+follow `prefers-color-scheme` but persist a manual override with no flash of
+the wrong theme, and a strict CSP (`script-src`/`style-src 'self'`, no
+`unsafe-inline`). The app installs to an Android home screen: a Web App
+Manifest with 192/512 + maskable icons, and a service worker that caches only
+the app shell, versioned static assets, and an offline page — never
+authenticated HTML or client data. Authentication still gates everything:
+Phase 2's password + TOTP flow drives the login screens, and the shell's
+Clients/Projects/Jobs/Settings sections are placeholders until Phases 4–7.
 
 ## License
 

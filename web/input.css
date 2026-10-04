@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/* Dark mode is driven by a class toggled by theme.js, so the operator can
+   override the system preference; theme.js seeds it from prefers-color-scheme
+   on first visit (F10.1, F10.2). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@source "./templates";
+@source "./static/offline.html";
+
+:root {
+  color-scheme: light;
+}
+
+:root.dark {
+  color-scheme: dark;
+}
+
+/* HTMX swaps request-specific fragments; keep focus outlines visible. */
+[aria-current="page"] {
+  font-weight: 600;
+}
+
+/* HTMX default indicator styles, shipped here instead of letting htmx inject
+   an inline <style> (which the CSP forbids). The meta config disables htmx's
+   own injection; hx-indicator still works. */
+.htmx-indicator {
+  opacity: 0;
+  transition: opacity 200ms ease-in;
+}
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  opacity: 1;
+}

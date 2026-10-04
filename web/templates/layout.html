@@ -1,0 +1,27 @@
+{{define "layout"}}<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
+  <title>{{if .Title}}{{.Title}} · {{end}}caffeinated-clients</title>
+  <meta name="description" content="Private CRM for existing clients">
+  <meta name="theme-color" content="#0f766e" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <script src="/static/theme.js?v={{.AssetVersion}}"></script>
+  <link rel="stylesheet" href="/static/app.css?v={{.AssetVersion}}">
+  <script src="/static/htmx.min.js?v={{.AssetVersion}}" defer></script>
+  <script src="/static/app.js?v={{.AssetVersion}}" defer></script>
+</head>
+<body class="min-h-dvh bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100" data-build="{{.AssetVersion}}"{{if .Authed}} hx-boost="true"{{end}}>
+  <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-teal-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white">Skip to content</a>
+  {{if .Authed}}{{template "topbar" .}}{{end}}
+  <main id="main" class="{{if .Authed}}mx-auto w-full max-w-3xl px-4 pb-28 pt-6{{else}}flex min-h-dvh items-center justify-center p-4{{end}}">
+    {{template "content" .}}
+  </main>
+  {{if .Authed}}{{template "nav" .}}{{end}}
+</body>
+</html>{{end}}

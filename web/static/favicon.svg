@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="caffeinated-clients">
+  <rect width="512" height="512" rx="112" fill="#0f766e"/>
+  <g fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M160 224h176v64a88 88 0 0 1-88 88 88 88 0 0 1-88-88z"/>
+    <path d="M336 240h24a48 48 0 0 1 0 96h-24"/>
+    <path d="M216 160c0-20 16-28 16-48"/>
+    <path d="M280 160c0-20 16-28 16-48"/>
+  </g>
+</svg>

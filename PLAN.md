@@ -337,16 +337,35 @@ HTMX conventions:
 
 ### Phase 3 — App shell, theming, PWA
 
-- [ ] `html/template` layout + partials, `//go:embed` templates and
+- [x] `html/template` layout + partials, `//go:embed` templates and
       static assets.
-- [ ] Tailwind standalone build wired into the Makefile/Dockerfile;
+- [x] Tailwind standalone build wired into the Makefile/Dockerfile;
       dark/light theme with persisted override and no FOUC.
-- [ ] Mobile nav (bottom bar), responsive layouts, accessible
+- [x] Mobile nav (bottom bar), responsive layouts, accessible
       components.
-- [ ] `manifest.webmanifest`, icons, service worker (static assets +
+- [x] `manifest.webmanifest`, icons, service worker (static assets +
       offline page), registration script.
-- [ ] CSP/security headers middleware.
-- [ ] Tests: template render smoke tests, header presence.
+- [x] CSP/security headers middleware.
+- [x] Tests: template render smoke tests, header presence.
+- **Decisions landed:** pages live under `web/templates/pages/`, shared
+  chrome in `web/templates/partials/`, and `parseTemplates` clones the
+  layout per page so every page can define the one `content` block
+  without collision. `web/static/app.css` is committed so a plain
+  `go build`/`go test` works offline with no Tailwind CLI; `make css`
+  regenerates it and the Docker build compiles it anyway. Dark mode is
+  class-driven (`@custom-variant dark`) with `theme.js` seeding from
+  `prefers-color-scheme` before first paint and `app.js` persisting the
+  manual override in `localStorage`; the toggle click is delegated so it
+  survives `hx-boost` body swaps. HTMX's injected inline `<style>` is
+  disabled via `<meta name="htmx-config">` (indicator CSS ships in
+  `app.css`) so the CSP keeps `script-src`/`style-src 'self'` with no
+  `unsafe-inline`. Static assets are versioned by `web.BuildVersion`
+  (`-X` ldflag; defaults `dev`), which also names the service-worker
+  cache; `dev` builds skip service-worker registration and use
+  `no-cache` so local edits are never pinned. The service worker caches
+  only `/static/*`, the manifest, and `/offline`, and navigations are
+  network-only with the offline page as fallback — no HTML or client
+  data is ever cached (F9.2).
 
 ### Phase 4 — Clients, contacts, search, dashboard
 
