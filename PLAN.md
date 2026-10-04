@@ -401,14 +401,33 @@ HTMX conventions:
 
 ### Phase 5 — Notes, secret notes, audit
 
-- [ ] Notes CRUD, pinned ordering, safe Markdown rendering.
-- [ ] Secret flag: masking in all lists/renders, tap-to-reveal
+- [x] Notes CRUD, pinned ordering, safe rendering.
+- [x] Secret flag: masking in all lists/renders, tap-to-reveal
       endpoint with `no-store`, 15-second auto-mask, clipboard copy.
-- [ ] Audit log writes on all F13 events; per-client Activity tab and
+- [x] Audit log writes on all F13 events; per-client Activity tab and
       global audit view.
-- [ ] Tests: reveal audit entry recorded, secret note absent from
+- [x] Tests: reveal audit entry recorded, secret note absent from
       search and from ordinary renders, reveal response carries
       `no-store`, `is_secret` toggle preserved across edits.
+- **Decisions landed:** notes live in `internal/crm` (`Note`, CRUD, and
+  separate pin/secret toggles) with pinned-first ordering. Updates change
+  only title/body — pin and secret are toggled by dedicated actions — so
+  an edit can never clear the secret flag (F4.6). Rendered secret bodies
+  are never present in ordinary HTML, including edit forms: a secret
+  note's inline editor exposes only its title, and a body-less update
+  preserves the stored body; the body is edited only from the audited,
+  `no-store` reveal response. The reveal endpoint refuses non-secret
+  notes. Audit listing (`ListAudit`/`ListClientAudit`) is in
+  `internal/auth` beside the writer; the client Activity tab and the
+  global Settings audit view both render it, with no secret material in
+  `detail`. The 15-second auto-mask, explicit hide, and clipboard copy
+  are a small delegated block in `app.js` (no inline script).
+- **Markdown:** v1 renders note bodies as escaped plain text with
+  preserved line breaks (F4.1 "plain text", F4.4 "rendered escaped by
+  default"). A safe Markdown subset was deliberately not added: it would
+  need either a linked parser + sanitizer (two dependencies) or
+  hand-rolled HTML emission, both more XSS surface for no v1 need.
+  Revisit only with a recorded decision, as with `templ`.
 
 ### Phase 6 — Projects and jobs
 

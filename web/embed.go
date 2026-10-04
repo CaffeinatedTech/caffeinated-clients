@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"io/fs"
 	"path"
+	"strings"
 	"time"
 )
 
@@ -26,6 +27,9 @@ var tmplFuncs = template.FuncMap{
 	},
 	"tabs": func() []string {
 		return []string{"overview", "contacts", "notes", "projects", "jobs", "activity"}
+	},
+	"humanize": func(s string) string {
+		return strings.ReplaceAll(s, "_", " ")
 	},
 }
 

@@ -91,9 +91,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /clients/{id}/contacts/{cid}", s.requireFull(s.requireCSRF(s.handleContactUpdate)))
 	mux.HandleFunc("POST /clients/{id}/contacts/{cid}/primary", s.requireFull(s.requireCSRF(s.handleContactPrimary)))
 	mux.HandleFunc("POST /clients/{id}/contacts/{cid}/delete", s.requireFull(s.requireCSRF(s.handleContactDelete)))
+	mux.HandleFunc("POST /clients/{id}/notes", s.requireFull(s.requireCSRF(s.handleNoteCreate)))
+	mux.HandleFunc("POST /clients/{id}/notes/{nid}", s.requireFull(s.requireCSRF(s.handleNoteUpdate)))
+	mux.HandleFunc("POST /clients/{id}/notes/{nid}/pin", s.requireFull(s.requireCSRF(s.handleNotePin)))
+	mux.HandleFunc("POST /clients/{id}/notes/{nid}/secret", s.requireFull(s.requireCSRF(s.handleNoteSecret)))
+	mux.HandleFunc("POST /clients/{id}/notes/{nid}/delete", s.requireFull(s.requireCSRF(s.handleNoteDelete)))
+	mux.HandleFunc("POST /notes/{nid}/reveal", s.requireFull(s.requireCSRF(s.handleNoteReveal)))
 	mux.HandleFunc("GET /projects", s.requireFull(s.handleSection("Projects", "projects")))
 	mux.HandleFunc("GET /jobs", s.requireFull(s.handleSection("Jobs", "jobs")))
-	mux.HandleFunc("GET /settings", s.requireFull(s.handleSection("Settings", "settings")))
+	mux.HandleFunc("GET /settings", s.requireFull(s.handleSettings))
 	return securityHeaders(mux)
 }
 
@@ -321,6 +327,11 @@ type pageData struct {
 	Tab            string
 	ContactForm    crm.ContactInput
 	ContactFormID  int64
+
+	// Phase 5 notes and audit view model.
+	Notes []crm.Note
+	Note  crm.Note
+	Audit []auth.AuditRecord
 }
 
 func (s *Server) render(w http.ResponseWriter, status int, name string, data pageData) {
@@ -698,6 +709,25 @@ func (s *Server) handleSection(title, active string) http.HandlerFunc {
 			Active:    active,
 		})
 	}
+}
+
+// handleSettings renders the global audit view (F13.3). The rest of the
+// Settings page lands in Phase 7.
+func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
+	sess := sessionFrom(r.Context())
+	audit, err := s.svc.ListAudit(r.Context(), 100)
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	s.render(w, http.StatusOK, "settings.html", pageData{
+		Title:     "Settings",
+		CSRFToken: sess.CSRFToken,
+		User:      sess.User,
+		Authed:    true,
+		Active:    "settings",
+		Audit:     audit,
+	})
 }
 
 // newFullSession issues a completed session and sets its cookie.

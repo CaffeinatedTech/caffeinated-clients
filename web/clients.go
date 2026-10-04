@@ -360,7 +360,39 @@ func (s *Server) clientPageData(r *http.Request, sess *auth.Session, client crm.
 			break
 		}
 	}
+	switch tab {
+	case "notes":
+		notes, err := s.crm.ListNotes(r.Context(), client.ID)
+		if err != nil {
+			return pageData{}, err
+		}
+		data.Notes = notes
+	case "activity":
+		audit, err := s.svc.ListClientAudit(r.Context(), client.ID, 100)
+		if err != nil {
+			return pageData{}, err
+		}
+		data.Audit = audit
+	}
 	return data, nil
+}
+
+// notePanelData builds the notes panel view model, reusing the client page data
+// so the same panel renders on the client page and as an HTMX fragment.
+func (s *Server) notePanelData(r *http.Request, sess *auth.Session, clientID int64) (pageData, error) {
+	client, err := s.crm.GetClient(r.Context(), clientID)
+	if err != nil {
+		return pageData{}, err
+	}
+	data, err := s.clientPageData(r, sess, client, "notes", "")
+	if err != nil {
+		return pageData{}, err
+	}
+	return data, nil
+}
+
+func clientTabURL(clientID int64, tab string) string {
+	return fmt.Sprintf("/clients/%d?tab=%s", clientID, tab)
 }
 
 func (s *Server) contactPanelData(r *http.Request, sess *auth.Session, clientID int64, form crm.ContactInput, editID int64, errMsg string) (pageData, error) {

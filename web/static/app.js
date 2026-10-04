@@ -32,6 +32,47 @@
   syncToggles();
   document.addEventListener("htmx:afterSettle", syncToggles);
 
+  // Secret reveal: a revealed body re-masks after 15 seconds (F5.3). The timer
+  // and controls are delegated to the swapped fragment, and nothing is written
+  // outside the DOM except the clipboard on explicit copy (F5.8).
+  function hideSecret(el) {
+    var shown = el.querySelector("[data-revealed]");
+    var masked = el.querySelector("[data-masked]");
+    if (shown) shown.hidden = true;
+    if (masked) masked.hidden = false;
+    if (el.__ccRevealTimer) {
+      clearTimeout(el.__ccRevealTimer);
+      el.__ccRevealTimer = null;
+    }
+    el.removeAttribute("data-secret-reveal");
+  }
+
+  function armSecret(el) {
+    if (!el || el.__ccArmed) return;
+    el.__ccArmed = true;
+    var hide = el.querySelector("[data-secret-hide]");
+    if (hide) hide.addEventListener("click", function () { hideSecret(el); });
+    var copy = el.querySelector("[data-secret-copy]");
+    if (copy) {
+      copy.addEventListener("click", function () {
+        var pre = el.querySelector("pre");
+        if (pre && navigator.clipboard) {
+          navigator.clipboard.writeText(pre.textContent).catch(function () {});
+        }
+      });
+    }
+    el.__ccRevealTimer = setTimeout(function () { hideSecret(el); }, 15000);
+  }
+
+  function armReveals(scope) {
+    var root = scope && scope.querySelectorAll ? scope : document;
+    if (root.matches && root.matches("[data-secret-reveal]")) armSecret(root);
+    root.querySelectorAll("[data-secret-reveal]").forEach(armSecret);
+  }
+
+  document.addEventListener("htmx:afterSwap", function (event) { armReveals(event.target); });
+  armReveals(document);
+
   // Service worker registration is HTTPS-only; *not* registering on plain
   // HTTP keeps local dev functional without install/offline (F9.6). The dev
   // build is also skipped: its stable ?v=dev URLs would let a cache-first
