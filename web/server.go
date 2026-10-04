@@ -118,6 +118,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /jobs/{id}/delete", s.requireFull(s.requireCSRF(s.handleJobDelete)))
 
 	mux.HandleFunc("GET /settings", s.requireFull(s.handleSettings))
+	mux.HandleFunc("POST /settings/password", s.requireFull(s.requireCSRF(s.handlePasswordChange)))
+	mux.HandleFunc("POST /settings/2fa/start", s.requireFull(s.requireCSRF(s.handleTOTPReenrollStart)))
+	mux.HandleFunc("POST /settings/2fa/confirm", s.requireFull(s.requireCSRF(s.handleTOTPReenrollConfirm)))
+	mux.HandleFunc("POST /settings/recovery-codes", s.requireFull(s.requireCSRF(s.handleRecoveryRegenerate)))
+	mux.HandleFunc("GET /settings/export", s.requireFull(s.handleExport))
+	mux.HandleFunc("POST /settings/export", s.requireFull(s.requireCSRF(s.handleExport)))
 	return securityHeaders(mux)
 }
 
@@ -350,6 +356,12 @@ type pageData struct {
 	Notes []crm.Note
 	Note  crm.Note
 	Audit []auth.AuditRecord
+
+	// Phase 7 settings view model. Secret/OTPAuthURL/Codes are reused from the
+	// enrollment flow to show a pending authenticator or freshly generated
+	// recovery codes exactly once.
+	Notice            string
+	RecoveryRemaining int
 
 	// Phase 6 projects and jobs view model.
 	Projects        []crm.Project
@@ -744,25 +756,6 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		OngoingProjects: ongoing,
 		OverdueJobs:     overdue,
 		UpcomingJobs:    upcoming,
-	})
-}
-
-// handleSettings renders the global audit view (F13.3). The rest of the
-// Settings page lands in Phase 7.
-func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
-	sess := sessionFrom(r.Context())
-	audit, err := s.svc.ListAudit(r.Context(), 100)
-	if err != nil {
-		s.serverError(w, err)
-		return
-	}
-	s.render(w, http.StatusOK, "settings.html", pageData{
-		Title:     "Settings",
-		CSRFToken: sess.CSRFToken,
-		User:      sess.User,
-		Authed:    true,
-		Active:    "settings",
-		Audit:     audit,
 	})
 }
 

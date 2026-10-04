@@ -23,6 +23,8 @@ type AuditRecord struct {
 	Detail   string
 }
 
+const auditColumns = `id, at, event, entity, entity_id, client_id, ip, detail`
+
 // ListAudit returns recent audit entries across all entities, newest first.
 func (s *Service) ListAudit(ctx context.Context, limit int) ([]AuditRecord, error) {
 	return s.listAudit(ctx, "", 0, limit)
@@ -34,6 +36,11 @@ func (s *Service) ListClientAudit(ctx context.Context, clientID int64, limit int
 	return s.listAudit(ctx, " WHERE client_id = ?", clientID, limit)
 }
 
+// AllAudit returns every audit entry, newest first, for the JSON export.
+func (s *Service) AllAudit(ctx context.Context) ([]AuditRecord, error) {
+	return s.queryAudit(ctx, `SELECT `+auditColumns+` FROM audit_log ORDER BY id DESC`)
+}
+
 func (s *Service) listAudit(ctx context.Context, where string, clientID int64, limit int) ([]AuditRecord, error) {
 	if limit <= 0 {
 		limit = defaultAuditLimit
@@ -41,13 +48,16 @@ func (s *Service) listAudit(ctx context.Context, where string, clientID int64, l
 	if limit > maxAuditLimit {
 		limit = maxAuditLimit
 	}
-	q := `SELECT id, at, event, entity, entity_id, client_id, ip, detail FROM audit_log` + where + ` ORDER BY id DESC LIMIT ?`
+	q := `SELECT ` + auditColumns + ` FROM audit_log` + where + ` ORDER BY id DESC LIMIT ?`
 	args := []any{}
 	if where != "" {
 		args = append(args, clientID)
 	}
 	args = append(args, limit)
+	return s.queryAudit(ctx, q, args...)
+}
 
+func (s *Service) queryAudit(ctx context.Context, q string, args ...any) ([]AuditRecord, error) {
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err

@@ -84,6 +84,13 @@ There is no separate "credential" object. Secrets are notes with a flag.
 - F1.10 `CCLIENTS_DISABLE_2FA=true` is a documented break-glass switch:
   it logs a loud warning at startup, still requires the password, and is
   intended only to recover from a lost authenticator.
+- F1.11 Changing the password, re-enrolling TOTP, and regenerating
+  recovery codes all require re-authentication with the current password
+  and, unless 2FA is disabled, a current TOTP or recovery code.
+- F1.12 TOTP can be re-enrolled from Settings: a replacement secret takes
+  effect only after a code generated from it is confirmed, so the current
+  authenticator keeps working until then. Re-enrollment regenerates the
+  recovery codes, which are shown once.
 
 ### F2 — Client management
 
@@ -281,7 +288,8 @@ There is no separate "credential" object. Secrets are notes with a flag.
 - F13.1 The app records an append-only audit log of security-relevant
   events: login success/failure, TOTP enrollment, recovery-code use,
   session logout, note create/update, secret-note create/update/reveal/
-  delete, secret-flag toggle, client create/delete, and data export.
+  delete, secret-flag toggle, client create/delete, password change,
+  TOTP re-enrollment, recovery-code regeneration, and data export.
 - F13.2 Audit entries carry timestamp, event, target entity and id, and
   client IP; entries never contain the body of a secret note or any
   password material. For a reveal, the entry records the note id and

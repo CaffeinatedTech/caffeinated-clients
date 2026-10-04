@@ -43,7 +43,10 @@ Android phone as a PWA with light and dark themes.
   alone.
 - **Single-user password + TOTP 2FA.** Argon2id password hashing,
   authenticator-app second factor, one-time recovery codes,
-  server-side sessions, CSRF protection, login rate limiting.
+  server-side sessions, CSRF protection, login rate limiting. Change the
+  password, re-enroll the authenticator, regenerate recovery codes, and
+  export a JSON copy from Settings — every security-sensitive change
+  re-authenticates first.
 - **Installable PWA.** Add to home screen on Android, standalone
   display, app shell and static assets cached for offline load; client
   data always requires the network.
@@ -124,7 +127,10 @@ bootstrap password env var**.
 ## Configuration
 
 Everything is environment variables — there is no config file to mount
-and no plaintext secret on disk outside the running process.
+and no plaintext secret on disk outside the running process. For Docker
+Compose, copy [`.env.example`](.env.example) to `.env` (git-ignored) and
+fill in the key; `.env.example` documents every variable with safe
+defaults.
 
 | Env var | Default | Purpose |
 |---|---|---|
@@ -167,8 +173,9 @@ Changing it is a deliberate `PRAGMA rekey` operation (see PLAN.md).
 6. Deploy, log in, enroll TOTP, then delete the bootstrap vars and
    redeploy.
 
-Full walkthrough, key handling, backup, and restore live in
-[docs/DEPLOY.md](docs/DEPLOY.md) once written (see [PLAN.md](PLAN.md)).
+Full walkthrough — key generation and storage, backup and restore,
+break-glass recovery, and upgrades — is in
+[docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Security model in one paragraph
 
@@ -198,12 +205,13 @@ indexed `LIKE` queries (see PLAN.md).
 ## Backups
 
 The entire application state is one encrypted SQLite file. Back up
-safely with `VACUUM INTO` or a WAL checkpoint plus file copy — never
-copy a live WAL database blindly. Backups are encrypted exactly like
-the live file. The Settings page offers a JSON export; **secret notes
-are excluded from that export by default**, since the export is
-plaintext. Backup and restore commands are documented in
-[docs/DEPLOY.md](docs/DEPLOY.md) (see [PLAN.md](PLAN.md)).
+safely by stopping the container cleanly (SQLite checkpoints the WAL) and
+copying the file, or with `VACUUM INTO` from a build that has a shell —
+never copy a live WAL database blindly. Backups are encrypted exactly
+like the live file. The Settings page offers a JSON export; **secret
+notes are excluded from that export by default**, since the export is
+plaintext. Backup, restore, and recovery commands are documented in
+[docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Why not just use ...
 
@@ -223,25 +231,15 @@ container, installable on your phone.
 
 ## Status
 
-**Phase 6 complete** — clients, contacts, notes, secrets, projects, jobs,
-search, and dashboard. Clients can be created with just a name, then edited,
-archived/restored, filtered and sorted, and permanently deleted behind a
-confirmation that names the client and the exact dependent counts. Each client
-page has tabs (Overview, Contacts, Notes, Projects, Jobs, Activity) with
-call/email/website/map quick actions; contacts are full CRUD with a
-single-primary rule enforced in the data layer. Notes support pinned and
-secret flags: secret bodies are masked everywhere and revealed only through an
-audited, `no-store` response that re-masks after 15 seconds, and secret notes
-never appear in search. Projects have a status lifecycle and live job-based
-progress; jobs optionally roll up to a project of the **same client** (enforced
-in the data layer), and marking a job done records a completion timestamp.
-Global Projects and Jobs views offer status/date/name filters, and the
-dashboard surfaces ongoing projects plus overdue and upcoming jobs. Search
-matches client names, contact name/phone/email, project names, and non-secret
-note titles, grouped by kind and served as an HTMX fragment with a full-page
-fallback; phone formatting is normalized so `555-0100`, `(555) 0100`, and
-`+15550100` all match. Authentication gates everything inside the Phase 3 PWA
-shell.
+**v0.1.0 — Phase 7 complete.** Everything in this README is implemented:
+clients (created with just a name), contacts with a single-primary rule,
+notes with pinned and secret flags and audited tap-to-reveal, projects and
+jobs, grouped search, dashboard widgets, and the mobile PWA shell. Settings
+covers password change (re-auth), authenticator re-enrollment (a pending
+secret is only promoted after you confirm a code from it), recovery-code
+regeneration, the theme toggle, and a JSON export that excludes secret notes
+unless you explicitly opt in. The service ships as a multi-arch GHCR image
+built by GitHub Actions on `v*` tags.
 
 ## License
 

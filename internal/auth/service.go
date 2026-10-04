@@ -210,6 +210,59 @@ func (s *Service) EnableTOTP(ctx context.Context, userID int64) error {
 	return err
 }
 
+// SetPassword hashes and stores a new password for the user.
+func (s *Service) SetPassword(ctx context.Context, userID int64, password string) error {
+	hash, err := HashPassword(s.params, password)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`,
+		hash, formatTS(time.Now()), userID)
+	return err
+}
+
+// SetPendingTOTPSecret stores a replacement secret without touching the active
+// one, so re-enrollment can be confirmed before it takes effect.
+func (s *Service) SetPendingTOTPSecret(ctx context.Context, userID int64, secret string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET totp_pending_secret = ?, updated_at = ? WHERE id = ?`,
+		secret, formatTS(time.Now()), userID)
+	return err
+}
+
+// PendingTOTPSecret returns the unconfirmed re-enrollment secret, or "" if
+// none is in progress.
+func (s *Service) PendingTOTPSecret(ctx context.Context, userID int64) (string, error) {
+	var secret string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT totp_pending_secret FROM users WHERE id = ?`, userID).Scan(&secret)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return secret, err
+}
+
+// EnablePendingTOTP promotes a confirmed pending secret to the active secret
+// and enables TOTP. It is a no-op when no re-enrollment is pending.
+func (s *Service) EnablePendingTOTP(ctx context.Context, userID int64) error {
+	now := formatTS(time.Now())
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE users SET totp_secret = totp_pending_secret, totp_pending_secret = '',
+		     totp_enabled = 1, totp_enrolled_at = ?, updated_at = ?
+		 WHERE id = ? AND totp_pending_secret <> ''`,
+		now, now, userID)
+	return err
+}
+
+// UnusedRecoveryCodeCount returns how many single-use codes remain.
+func (s *Service) UnusedRecoveryCodeCount(ctx context.Context, userID int64) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM recovery_codes WHERE user_id = ? AND used_at IS NULL`, userID).Scan(&n)
+	return n, err
+}
+
 // StoreRecoveryCodes replaces the user's unused recovery codes with hashes of
 // the supplied plaintext codes.
 func (s *Service) StoreRecoveryCodes(ctx context.Context, userID int64, codes []string) error {

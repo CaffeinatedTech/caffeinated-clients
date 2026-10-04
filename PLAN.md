@@ -260,8 +260,7 @@ HTMX conventions:
   arm64.
 - **Coolify:** deploy from the GHCR image or the repo Dockerfile; set
   the domain + TLS, mount a volume at `/data`, set env vars, health
-  check `/healthz`. Documented step by step in `docs/DEPLOY.md`
-  (written in Phase 7).
+  check `/healthz`. Documented step by step in [docs/DEPLOY.md](docs/DEPLOY.md).
 - **Backup:** `VACUUM INTO '/data/backup-YYYYMMDD.db'` (output is
   encrypted like the source) or WAL checkpoint + copy; restore is
   stopping the container and replacing the file. Documented, not
@@ -462,14 +461,36 @@ HTMX conventions:
 
 ### Phase 7 — Settings, export, deploy polish
 
-- [ ] Settings: change password (re-auth), re-enroll 2FA, view/regenerate
+- [x] Settings: change password (re-auth), re-enroll 2FA, view/regenerate
       recovery codes, theme, JSON export (secret notes opt-in only).
-- [ ] `docs/DEPLOY.md`: Coolify walkthrough, key generation and storage,
+- [x] `docs/DEPLOY.md`: Coolify walkthrough, key generation and storage,
       backup and restore, break-glass recovery, `PRAGMA rekey` note.
-- [ ] Dockerfile + multi-arch GitHub Actions publish to GHCR.
-- [ ] `docker-compose.yml` + `.env.example` + `env.example`.
-- [ ] README final pass against the real commands.
-- [ ] Cut `v0.1.0`.
+- [x] Dockerfile + multi-arch GitHub Actions publish to GHCR.
+- [x] `docker-compose.yml` + `.env.example` (consolidated from
+      `env.example`; one file, ignored by git except the example).
+- [x] README final pass against the real commands.
+- [x] Cut `v0.1.0`.
+- **Decisions landed:** Settings lives in `web/settings.go`. Security-
+  sensitive changes re-authenticate with the current password plus a
+  current TOTP or recovery code (`Server.reauth`), unless 2FA is disabled.
+  TOTP re-enrollment uses a new `users.totp_pending_secret` column
+  (migration `0003_settings.sql`): the replacement secret is stored
+  pending while the active one keeps working, and only `EnablePendingTOTP`
+  promotes it after a code from the new secret is confirmed — so an
+  abandoned re-enrollment can neither lock the user out nor silently
+  disable 2FA. Re-enrollment regenerates recovery codes. The plaintext
+  JSON export (F12.3) is `crm.Export` plus `auth.AllAudit`; it never
+  includes the `users`, `sessions`, or `recovery_codes` tables (password /
+  token / TOTP-secret hashes stay in the database), excludes secret notes
+  by default, and the opt-in POST requires two confirmation checkboxes and
+  is audited separately. Release images are published multi-arch
+  (`linux/amd64`, `linux/arm64`) by `.github/workflows/release.yml` on
+  `v*` tags; `.github/workflows/ci.yml` runs build/vet/gofmt/test.
+- **Deferred:** `PRAGMA rekey` remains out of v1; `docs/DEPLOY.md` records
+  it as the planned upgrade path. Backup in the shipped distroless image
+  is clean-stop + file copy (SQLite checkpoints on clean close); a
+  `--backup`/`VACUUM INTO` command is the documented alternative for a
+  tool build, not shipped.
 
 ### Later / explicitly out of scope for v1
 
