@@ -1,0 +1,116 @@
+{{define "content"}}
+<article>
+  <a href="/clients" class="text-xs font-medium text-slate-500 hover:underline dark:text-slate-400">&larr; Clients</a>
+
+  <header class="mt-1">
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <h1 class="truncate text-2xl font-semibold tracking-tight">{{.Client.Name}}</h1>
+        <p class="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+          <span class="rounded-full px-2 py-0.5 text-[11px] font-medium
+            {{if eq .Client.Status "active"}}bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300
+            {{else if eq .Client.Status "archived"}}bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400
+            {{else}}bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300{{end}}">{{.Client.Status}}</span>
+          {{if .PrimaryContact}}<span>{{.PrimaryContact.Name}}{{if .PrimaryContact.Role}} · {{.PrimaryContact.Role}}{{end}}</span>{{end}}
+        </p>
+      </div>
+    </div>
+
+    {{if or .Client.Website .Client.Address (and .PrimaryContact (or .PrimaryContact.Phone .PrimaryContact.Email))}}
+    <div class="mt-3 flex flex-wrap gap-2">
+      {{if .PrimaryContact}}{{if .PrimaryContact.Phone}}
+      <a href="tel:{{.PrimaryContact.PhoneDigits}}" class="inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-3 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Call</a>
+      {{end}}{{if .PrimaryContact.Email}}
+      <a href="mailto:{{.PrimaryContact.Email}}" class="inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-3 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Email</a>
+      {{end}}{{end}}
+      {{if .Client.Website}}
+      <a href="{{.Client.Website}}" rel="noreferrer" class="inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-3 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Website</a>
+      {{end}}
+      {{if .Client.Address}}
+      <a href="https://www.openstreetmap.org/search?query={{urlquery .Client.Address}}" rel="noreferrer" class="inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-3 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Map</a>
+      {{end}}
+    </div>
+    {{end}}
+  </header>
+
+  <nav class="mt-5 flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800" aria-label="Client sections">
+    {{range $tab := tabs}}
+    <a href="/clients/{{$.Client.ID}}?tab={{$tab}}" class="whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium capitalize
+      {{if eq $.Tab $tab}}border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-400
+      {{else}}border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100{{end}}">{{$tab}}</a>
+    {{end}}
+  </nav>
+
+  {{if .Error}}
+  <p role="alert" class="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">{{.Error}}</p>
+  {{end}}
+
+  {{if eq .Tab "overview"}}
+  <section class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+    <dl class="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+      <div>
+        <dt class="text-xs font-medium text-slate-500 dark:text-slate-400">Main phone</dt>
+        <dd class="mt-0.5">{{if .Client.Phone}}<a href="tel:{{.Client.PhoneDigits}}" class="text-teal-700 hover:underline dark:text-teal-400">{{.Client.Phone}}</a>{{else}}<span class="text-slate-400">—</span>{{end}}</dd>
+      </div>
+      <div>
+        <dt class="text-xs font-medium text-slate-500 dark:text-slate-400">Website</dt>
+        <dd class="mt-0.5">{{if .Client.Website}}<a href="{{.Client.Website}}" rel="noreferrer" class="break-all text-teal-700 hover:underline dark:text-teal-400">{{.Client.Website}}</a>{{else}}<span class="text-slate-400">—</span>{{end}}</dd>
+      </div>
+      <div class="sm:col-span-2">
+        <dt class="text-xs font-medium text-slate-500 dark:text-slate-400">Address</dt>
+        <dd class="mt-0.5 whitespace-pre-line">{{if .Client.Address}}{{.Client.Address}}{{else}}<span class="text-slate-400">—</span>{{end}}</dd>
+      </div>
+      <div class="sm:col-span-2">
+        <dt class="text-xs font-medium text-slate-500 dark:text-slate-400">Tags</dt>
+        <dd class="mt-0.5">{{if .Client.Tags}}{{.Client.Tags}}{{else}}<span class="text-slate-400">—</span>{{end}}</dd>
+      </div>
+      <div class="sm:col-span-2">
+        <dt class="text-xs font-medium text-slate-500 dark:text-slate-400">Summary</dt>
+        <dd class="mt-0.5 whitespace-pre-line">{{if .Client.Summary}}{{.Client.Summary}}{{else}}<span class="text-slate-400">—</span>{{end}}</dd>
+      </div>
+    </dl>
+    <p class="mt-4 text-xs text-slate-400 dark:text-slate-500">Created {{date .Client.CreatedAt}}{{if .Client.UpdatedAt}} · Updated {{date .Client.UpdatedAt}}{{end}}</p>
+  </section>
+
+  <details class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+    <summary class="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">Edit client</summary>
+    <form method="post" action="/clients/{{.Client.ID}}?tab=overview" class="mt-3">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      {{template "client_fields" .}}
+      <div class="mt-4">
+        <button type="submit" class="inline-flex min-h-11 items-center rounded-lg bg-teal-600 px-4 text-sm font-semibold text-white hover:bg-teal-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600">Save changes</button>
+      </div>
+    </form>
+  </details>
+
+  <section class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+    <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200">Manage</h2>
+    <form method="post" action="/clients/{{.Client.ID}}/archive" class="mt-3">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      {{if .Client.Archived}}
+      <input type="hidden" name="archived" value="0">
+      <button type="submit" class="inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-4 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Restore client</button>
+      {{else}}
+      <input type="hidden" name="archived" value="1">
+      <button type="submit" class="inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-4 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Archive client</button>
+      {{end}}
+    </form>
+
+    <details class="mt-4 rounded-xl border border-red-200 p-3 dark:border-red-900">
+      <summary class="cursor-pointer text-sm font-medium text-red-700 dark:text-red-300">Delete client</summary>
+      <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Deleting <strong>{{.Client.Name}}</strong> permanently removes {{.Counts.Contacts}} contact(s), {{.Counts.Notes}} note(s), {{.Counts.Projects}} project(s), and {{.Counts.Jobs}} job(s). This cannot be undone.</p>
+      <form method="post" action="/clients/{{.Client.ID}}/delete" class="mt-3">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="inline-flex min-h-10 items-center rounded-lg bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600">Delete permanently</button>
+      </form>
+    </details>
+  </section>
+  {{else if eq .Tab "contacts"}}
+  {{template "contacts_panel" .}}
+  {{else}}
+  <section class="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-900">
+    <p class="text-sm text-slate-500 dark:text-slate-400">The <span class="font-medium capitalize">{{.Tab}}</span> tab arrives in a later phase.</p>
+  </section>
+  {{end}}
+</article>
+{{end}}

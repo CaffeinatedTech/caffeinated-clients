@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"errors"
+	"html/template"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/CaffeinatedTech/caffeinated-clients/internal/auth"
 	"github.com/CaffeinatedTech/caffeinated-clients/internal/config"
+	"github.com/CaffeinatedTech/caffeinated-clients/internal/crm"
 	"github.com/CaffeinatedTech/caffeinated-clients/internal/store"
 )
 
@@ -33,13 +35,15 @@ const sessionCtxKey ctxKey = iota
 
 // Server serves the HTTP application.
 type Server struct {
-	svc     *auth.Service
-	cfg     *config.Config
-	log     *slog.Logger
-	db      *sql.DB
-	tmpl    pageTemplates
-	static  fs.FS
-	limiter *auth.Limiter
+	svc      *auth.Service
+	cfg      *config.Config
+	log      *slog.Logger
+	db       *sql.DB
+	crm      *crm.Store
+	tmpl     pageTemplates
+	partials *template.Template
+	static   fs.FS
+	limiter  *auth.Limiter
 }
 
 // New builds a Server and parses the embedded templates.
@@ -48,11 +52,15 @@ func New(svc *auth.Service, cfg *config.Config, log *slog.Logger, db *sql.DB) (*
 	if err != nil {
 		return nil, err
 	}
+	partials, err := parsePartials()
+	if err != nil {
+		return nil, err
+	}
 	static, err := staticSub()
 	if err != nil {
 		return nil, err
 	}
-	return &Server{svc: svc, cfg: cfg, log: log, db: db, tmpl: tmpl, static: static, limiter: auth.NewLimiter()}, nil
+	return &Server{svc: svc, cfg: cfg, log: log, db: db, crm: crm.New(db), tmpl: tmpl, partials: partials, static: static, limiter: auth.NewLimiter()}, nil
 }
 
 // Handler returns the routed, middleware-wrapped http.Handler.
@@ -71,7 +79,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /setup", s.requirePending(s.requireCSRF(s.handleSetupPost)))
 	mux.HandleFunc("POST /logout", s.requireFull(s.requireCSRF(s.handleLogout)))
 	mux.HandleFunc("GET /", s.requireFull(s.handleHome))
-	mux.HandleFunc("GET /clients", s.requireFull(s.handleSection("Clients", "clients")))
+	mux.HandleFunc("GET /search", s.requireFull(s.handleSearch))
+	mux.HandleFunc("GET /clients", s.requireFull(s.handleClients))
+	mux.HandleFunc("GET /clients/new", s.requireFull(s.handleClientNew))
+	mux.HandleFunc("POST /clients", s.requireFull(s.requireCSRF(s.handleClientCreate)))
+	mux.HandleFunc("GET /clients/{id}", s.requireFull(s.handleClientShow))
+	mux.HandleFunc("POST /clients/{id}", s.requireFull(s.requireCSRF(s.handleClientUpdate)))
+	mux.HandleFunc("POST /clients/{id}/archive", s.requireFull(s.requireCSRF(s.handleClientArchive)))
+	mux.HandleFunc("POST /clients/{id}/delete", s.requireFull(s.requireCSRF(s.handleClientDelete)))
+	mux.HandleFunc("POST /clients/{id}/contacts", s.requireFull(s.requireCSRF(s.handleContactCreate)))
+	mux.HandleFunc("POST /clients/{id}/contacts/{cid}", s.requireFull(s.requireCSRF(s.handleContactUpdate)))
+	mux.HandleFunc("POST /clients/{id}/contacts/{cid}/primary", s.requireFull(s.requireCSRF(s.handleContactPrimary)))
+	mux.HandleFunc("POST /clients/{id}/contacts/{cid}/delete", s.requireFull(s.requireCSRF(s.handleContactDelete)))
 	mux.HandleFunc("GET /projects", s.requireFull(s.handleSection("Projects", "projects")))
 	mux.HandleFunc("GET /jobs", s.requireFull(s.handleSection("Jobs", "jobs")))
 	mux.HandleFunc("GET /settings", s.requireFull(s.handleSection("Settings", "settings")))
@@ -287,6 +306,21 @@ type pageData struct {
 	Authed       bool
 	Active       string
 	AssetVersion string
+
+	// Phase 4 CRM view model.
+	Clients        []crm.Client
+	Client         crm.Client
+	Contacts       []crm.Contact
+	PrimaryContact *crm.Contact
+	Counts         crm.CascadeCounts
+	Results        crm.Results
+	Query          string
+	Filter         string
+	Status         string
+	Sort           string
+	Tab            string
+	ContactForm    crm.ContactInput
+	ContactFormID  int64
 }
 
 func (s *Server) render(w http.ResponseWriter, status int, name string, data pageData) {
@@ -303,6 +337,20 @@ func (s *Server) render(w http.ResponseWriter, status int, name string, data pag
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if err := t.ExecuteTemplate(w, "layout", data); err != nil {
+		s.log.Error("template render failed", "template", name, "err", err)
+	}
+}
+
+// renderFragment executes a single named partial (an HTMX swap target) without
+// the surrounding layout.
+func (s *Server) renderFragment(w http.ResponseWriter, status int, name string, data pageData) {
+	if data.AssetVersion == "" {
+		data.AssetVersion = BuildVersion
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	if err := s.partials.ExecuteTemplate(w, name, data); err != nil {
 		s.log.Error("template render failed", "template", name, "err", err)
 	}
 }
@@ -622,12 +670,18 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	sess := sessionFrom(r.Context())
+	recent, err := s.crm.RecentClients(r.Context(), 6)
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
 	s.render(w, http.StatusOK, "home.html", pageData{
 		Title:     "Dashboard",
 		CSRFToken: sess.CSRFToken,
 		User:      sess.User,
 		Authed:    true,
 		Active:    "home",
+		Clients:   recent,
 	})
 }
 

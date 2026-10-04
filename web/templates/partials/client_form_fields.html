@@ -1,0 +1,36 @@
+{{define "client_fields"}}
+<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+  <label class="block sm:col-span-2">
+    <span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Name <span class="text-red-600">*</span></span>
+    <input name="name" required value="{{.Client.Name}}" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+  </label>
+  <label class="block">
+    <span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Phone</span>
+    <input name="phone" type="tel" inputmode="tel" value="{{.Client.Phone}}" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+  </label>
+  <label class="block">
+    <span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Status</span>
+    <select name="status" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+      <option value="active" {{if eq .Client.Status "active"}}selected{{end}}>Active</option>
+      <option value="inactive" {{if eq .Client.Status "inactive"}}selected{{end}}>Inactive</option>
+      <option value="archived" {{if eq .Client.Status "archived"}}selected{{end}}>Archived</option>
+    </select>
+  </label>
+  <label class="block sm:col-span-2">
+    <span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Website</span>
+    <input name="website" type="url" placeholder="https://" value="{{.Client.Website}}" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+  </label>
+  <label class="block sm:col-span-2">
+    <span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Address</span>
+    <input name="address" value="{{.Client.Address}}" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+  </label>
+  <label class="block sm:col-span-2">
+    <span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Tags</span>
+    <input name="tags" value="{{.Client.Tags}}" placeholder="comma, separated" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+  </label>
+  <label class="block sm:col-span-2">
+    <span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Summary</span>
+    <textarea name="summary" rows="3" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">{{.Client.Summary}}</textarea>
+  </label>
+</div>
+{{end}}

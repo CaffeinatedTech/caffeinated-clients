@@ -223,17 +223,19 @@ container, installable on your phone.
 
 ## Status
 
-**Phase 3 complete** — app shell, theming, and PWA. Every page now renders
-through a shared `html/template` layout (app bar, bottom navigation, skip
-link) with Tailwind CSS compiled from the templates, light/dark themes that
-follow `prefers-color-scheme` but persist a manual override with no flash of
-the wrong theme, and a strict CSP (`script-src`/`style-src 'self'`, no
-`unsafe-inline`). The app installs to an Android home screen: a Web App
-Manifest with 192/512 + maskable icons, and a service worker that caches only
-the app shell, versioned static assets, and an offline page — never
-authenticated HTML or client data. Authentication still gates everything:
-Phase 2's password + TOTP flow drives the login screens, and the shell's
-Clients/Projects/Jobs/Settings sections are placeholders until Phases 4–7.
+**Phase 4 complete** — clients, contacts, search, and dashboard. Clients can
+be created with just a name, then edited, archived/restored, filtered and
+sorted, and permanently deleted behind a confirmation that names the client
+and the exact dependent counts. Each client page has tabs (Overview,
+Contacts, and placeholders for Notes/Projects/Jobs/Activity) with call/email/
+website/map quick actions; contacts are full CRUD with a single-primary rule
+enforced in the data layer. Search matches client names, contact name/phone/
+email, project names, and non-secret note titles, grouped by kind and served
+as an HTMX fragment with a full-page fallback; phone formatting is normalized
+so `555-0100`, `(555) 0100`, and `+15550100` all match. Secret notes and note
+bodies never appear in search. The dashboard shows recent clients and the same
+instant search. Authentication still gates everything (Phase 2) inside the
+Phase 3 PWA shell.
 
 ## License
 

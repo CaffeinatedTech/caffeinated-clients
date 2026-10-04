@@ -1,0 +1,20 @@
+{{define "content"}}
+<section>
+  <a href="/clients" class="text-xs font-medium text-slate-500 hover:underline dark:text-slate-400">&larr; Clients</a>
+  <h1 class="mt-1 text-2xl font-semibold tracking-tight">New client</h1>
+  <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">A name is enough. Everything else can be filled in later.</p>
+</section>
+
+{{if .Error}}
+<p role="alert" class="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">{{.Error}}</p>
+{{end}}
+
+<form method="post" action="/clients" class="mt-6 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  {{template "client_fields" .}}
+  <div class="mt-4 flex items-center gap-3">
+    <button type="submit" class="inline-flex min-h-11 items-center rounded-lg bg-teal-600 px-4 text-sm font-semibold text-white hover:bg-teal-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600">Create client</button>
+    <a href="/clients" class="text-sm text-slate-500 hover:underline dark:text-slate-400">Cancel</a>
+  </div>
+</form>
+{{end}}

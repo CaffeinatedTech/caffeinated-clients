@@ -369,15 +369,35 @@ HTMX conventions:
 
 ### Phase 4 — Clients, contacts, search, dashboard
 
-- [ ] Client CRUD, archive/restore, cascade delete with confirmation.
-- [ ] Contacts CRUD with single-primary rule.
-- [ ] Client page with tabs and overview.
-- [ ] Search across clients, contacts, projects, and non-secret note
+- [x] Client CRUD, archive/restore, cascade delete with confirmation.
+- [x] Contacts CRUD with single-primary rule.
+- [x] Client page with tabs and overview.
+- [x] Search across clients, contacts, projects, and non-secret note
       titles as an HTMX partial with full-page fallback; phone
       normalization.
-- [ ] Dashboard: search, recently updated clients.
-- [ ] Tests: phone normalization, grouping, secret notes excluded from
+- [x] Dashboard: search, recently updated clients.
+- [x] Tests: phone normalization, grouping, secret notes excluded from
       search, primary-contact invariant, cascade delete.
+- **Decisions landed:** domain data lives in `internal/crm` (one concrete
+  `Store` over the same encrypted `*sql.DB`), keeping SQL out of the HTTP
+  layer and out of `auth`. The single-primary-contact rule is enforced in
+  the store with a transaction that clears the previous primary before
+  setting the new one (the partial unique index is the backstop), not
+  only in the UI. Cascade delete relies on the existing
+  `ON DELETE CASCADE` foreign keys with `foreign_keys=ON`; the delete
+  confirmation renders the client name and per-kind row counts
+  (F12.5). Search is parameterized `LIKE` over indexed columns plus a
+  normalized `phone_digits` match that accepts `555-0100`,
+  `(555) 0100`, and `+15550100` in either direction; non-secret notes
+  only (`is_secret = 0`), and note bodies are never searched. Mutations
+  return the replaced contacts partial for HTMX and a redirect /
+  full-page render otherwise, so Q5 holds. The dashboard surfaces search
+  and recently-updated clients; ongoing-projects and upcoming-jobs
+  widgets stay with Phase 6.
+- **Decisions landed (templ):** the `html/template` ergonomics risk is
+  resolved for v1 — stay on stdlib templates with small composable
+  partials (`client_fields`, `contacts_panel`, `search_results`) and a
+  flat per-page view model. No `templ`.
 
 ### Phase 5 — Notes, secret notes, audit
 
@@ -440,9 +460,10 @@ HTMX conventions:
   opening an existing encrypted file with a wrong key does not create
   an empty database or wipe data.
 - **`html/template` ergonomics.** Many partials and per-component data
-  structs can get verbose without `templ`. Mitigation: a small set of
-  composable partials and a view-model layer; escalate to `templ` only
-  if it genuinely becomes painful — decide at the end of Phase 4.
+  structs can get verbose without `templ`. **Resolved at Phase 4:** the
+  client/contact/search screens landed on stdlib templates with a few
+  named partials and a flat view model; it did not become painful.
+  Revisit only if it genuinely does.
 - **Encryption + WAL + backups.** `VACUUM INTO` produces an encrypted
   copy; WAL checkpoint + copy also works because encryption is
   transparent. Document both and warn against copying a live WAL file.

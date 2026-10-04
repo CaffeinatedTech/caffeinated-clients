@@ -1,0 +1,16 @@
+{{define "content"}}
+<section>
+  <h1 class="text-2xl font-semibold tracking-tight">Search</h1>
+  <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Clients, contacts, projects, and non-secret note titles.</p>
+</section>
+
+<form method="get" action="/search" role="search" class="mt-4">
+  <label class="sr-only" for="search-q">Search</label>
+  <input id="search-q" type="search" name="q" value="{{.Query}}" autofocus
+    hx-get="/search" hx-trigger="input changed delay:250ms, search" hx-target="#search-results" hx-swap="outerHTML"
+    placeholder="Search…"
+    class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base shadow-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 dark:border-slate-700 dark:bg-slate-900">
+</form>
+
+{{template "search_results" .}}
+{{end}}

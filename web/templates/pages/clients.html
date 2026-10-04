@@ -1,0 +1,68 @@
+{{define "content"}}
+<section class="flex items-center justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Clients</h1>
+    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{len .Clients}} shown</p>
+  </div>
+  <a href="/clients/new" class="inline-flex min-h-11 shrink-0 items-center rounded-lg bg-teal-600 px-4 text-sm font-semibold text-white hover:bg-teal-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600">New client</a>
+</section>
+
+<form method="get" action="/clients" class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+  <label class="col-span-2 block sm:col-span-2">
+    <span class="sr-only">Filter clients</span>
+    <input type="search" name="q" value="{{.Filter}}" placeholder="Filter by name or phone" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+  </label>
+  <label class="block">
+    <span class="sr-only">Status</span>
+    <select name="status" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+      <option value="" {{if eq .Status ""}}selected{{end}}>Active &amp; inactive</option>
+      <option value="active" {{if eq .Status "active"}}selected{{end}}>Active</option>
+      <option value="inactive" {{if eq .Status "inactive"}}selected{{end}}>Inactive</option>
+      <option value="archived" {{if eq .Status "archived"}}selected{{end}}>Archived</option>
+      <option value="all" {{if eq .Status "all"}}selected{{end}}>All</option>
+    </select>
+  </label>
+  <label class="block">
+    <span class="sr-only">Sort</span>
+    <select name="sort" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+      <option value="name" {{if eq .Sort "name"}}selected{{end}}>Name</option>
+      <option value="updated" {{if eq .Sort "updated"}}selected{{end}}>Recently updated</option>
+      <option value="created" {{if eq .Sort "created"}}selected{{end}}>Recently created</option>
+    </select>
+  </label>
+  <div class="col-span-2 flex gap-2 sm:col-span-4">
+    <button type="submit" class="inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-4 text-sm font-medium hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600 dark:border-slate-700 dark:hover:bg-slate-800">Apply</button>
+    <a href="/clients" class="inline-flex min-h-10 items-center rounded-lg px-3 text-sm text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100">Reset</a>
+  </div>
+</form>
+
+{{if .Clients}}
+<ul class="mt-6 space-y-3">
+  {{range .Clients}}
+  <li>
+    <a href="/clients/{{.ID}}" class="block rounded-2xl border border-slate-200 bg-white p-4 hover:border-teal-300 hover:shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-teal-800">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="truncate text-base font-semibold">{{.Name}}</p>
+          <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500 dark:text-slate-400">
+            {{if .Phone}}<span>{{.Phone}}</span>{{end}}
+            {{if .Website}}<span class="truncate">{{.Website}}</span>{{end}}
+          </div>
+        </div>
+        <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium
+          {{if eq .Status "active"}}bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300
+          {{else if eq .Status "archived"}}bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400
+          {{else}}bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300{{end}}">{{.Status}}</span>
+      </div>
+      {{if .UpdatedAt}}<p class="mt-2 text-xs text-slate-400 dark:text-slate-500">Updated {{date .UpdatedAt}}</p>{{end}}
+    </a>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<div class="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-900">
+  <p class="text-sm text-slate-500 dark:text-slate-400">No clients match. Add your first one.</p>
+  <a href="/clients/new" class="mt-4 inline-flex min-h-11 items-center rounded-lg bg-teal-600 px-4 text-sm font-semibold text-white hover:bg-teal-700">New client</a>
+</div>
+{{end}}
+{{end}}

@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"io/fs"
 	"path"
+	"time"
 )
 
 //go:embed templates/layout.html templates/partials/*.html templates/pages/*.html
@@ -14,6 +15,19 @@ var templatesFS embed.FS
 
 //go:embed static
 var staticFS embed.FS
+
+// tmplFuncs are the only template helpers; keep them small and side-effect free.
+var tmplFuncs = template.FuncMap{
+	"date": func(t time.Time) string {
+		if t.IsZero() {
+			return ""
+		}
+		return t.Format("2 Jan 2006")
+	},
+	"tabs": func() []string {
+		return []string{"overview", "contacts", "notes", "projects", "jobs", "activity"}
+	},
+}
 
 // BuildVersion identifies the running build and versions the static-asset and
 // service-worker caches. Override at link time with
@@ -26,7 +40,7 @@ var BuildVersion = "dev"
 type pageTemplates map[string]*template.Template
 
 func parseTemplates() (pageTemplates, error) {
-	base, err := template.New("").ParseFS(templatesFS, "templates/layout.html", "templates/partials/*.html")
+	base, err := parsePartials()
 	if err != nil {
 		return nil, err
 	}
@@ -51,3 +65,9 @@ func parseTemplates() (pageTemplates, error) {
 // staticSub returns the embedded static assets rooted at static/, so a request
 // for /static/app.css maps to app.css.
 func staticSub() (fs.FS, error) { return fs.Sub(staticFS, "static") }
+
+// parsePartials parses the layout and shared partials once, for executing a
+// single partial as an HTMX fragment without a page.
+func parsePartials() (*template.Template, error) {
+	return template.New("").Funcs(tmplFuncs).ParseFS(templatesFS, "templates/layout.html", "templates/partials/*.html")
+}
