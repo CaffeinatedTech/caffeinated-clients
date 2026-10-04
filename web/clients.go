@@ -367,6 +367,25 @@ func (s *Server) clientPageData(r *http.Request, sess *auth.Session, client crm.
 			return pageData{}, err
 		}
 		data.Notes = notes
+	case "projects":
+		projects, err := s.crm.ListProjects(r.Context(), crm.ProjectOptions{ClientID: client.ID, Status: "all"})
+		if err != nil {
+			return pageData{}, err
+		}
+		data.Projects = projects
+		data.ProjectForm = projectFormView(crm.ProjectInput{})
+	case "jobs":
+		jobs, err := s.crm.ListJobs(r.Context(), crm.JobOptions{ClientID: client.ID, Status: "all"})
+		if err != nil {
+			return pageData{}, err
+		}
+		projects, err := s.crm.ListProjects(r.Context(), crm.ProjectOptions{ClientID: client.ID, Status: "all"})
+		if err != nil {
+			return pageData{}, err
+		}
+		data.Jobs = jobs
+		data.Projects = projects
+		data.JobForm = jobFormView(crm.JobInput{})
 	case "activity":
 		audit, err := s.svc.ListClientAudit(r.Context(), client.ID, 100)
 		if err != nil {

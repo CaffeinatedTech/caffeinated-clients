@@ -31,6 +31,15 @@ var tmplFuncs = template.FuncMap{
 	"humanize": func(s string) string {
 		return strings.ReplaceAll(s, "_", " ")
 	},
+	// hasdate guards optional timestamps: a zero time.Time is a truthy struct
+	// in templates, so `{{if .SomeTime}}` alone is wrong.
+	"hasdate": func(t time.Time) bool { return !t.IsZero() },
+	// overdue reports whether an open job or project is past its due date. Due
+	// dates are stored date-only, so the comparison is on the date string.
+	"overdue": func(due time.Time, status string) bool {
+		return status != "done" && status != "archived" && !due.IsZero() &&
+			due.Format("2006-01-02") < time.Now().Format("2006-01-02")
+	},
 }
 
 // BuildVersion identifies the running build and versions the static-asset and

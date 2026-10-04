@@ -1,0 +1,21 @@
+{{define "job_fields"}}
+<label class="block sm:col-span-2"><span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Title</span>
+  <input name="title" required value="{{.JobForm.Title}}" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"></label>
+<label class="block"><span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Status</span>
+  <select name="status" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+    <option value="open" {{if eq .JobForm.Status "open"}}selected{{end}}>Open</option>
+    <option value="in_progress" {{if eq .JobForm.Status "in_progress"}}selected{{end}}>In progress</option>
+    <option value="waiting" {{if eq .JobForm.Status "waiting"}}selected{{end}}>Waiting</option>
+    <option value="done" {{if eq .JobForm.Status "done"}}selected{{end}}>Done</option>
+  </select></label>
+<label class="block"><span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Priority</span>
+  <select name="priority" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+    <option value="low" {{if eq .JobForm.Priority "low"}}selected{{end}}>Low</option>
+    <option value="normal" {{if eq .JobForm.Priority "normal"}}selected{{end}}>Normal</option>
+    <option value="high" {{if eq .JobForm.Priority "high"}}selected{{end}}>High</option>
+  </select></label>
+<label class="block sm:col-span-2"><span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Due date</span>
+  <input type="date" name="due_date" value="{{.JobForm.DueDate}}" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"></label>
+<label class="block sm:col-span-2"><span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Description</span>
+  <textarea name="description" rows="3" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">{{.JobForm.Description}}</textarea></label>
+{{end}}

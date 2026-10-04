@@ -1,0 +1,62 @@
+{{define "content"}}
+<article>
+  <a href="/jobs" class="text-xs font-medium text-slate-500 hover:underline dark:text-slate-400">&larr; Jobs</a>
+
+  <header class="mt-1">
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <h1 class="truncate text-2xl font-semibold tracking-tight">{{.Job.Title}}</h1>
+        <p class="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+          <span class="rounded-full px-2 py-0.5 text-[11px] font-medium
+            {{if eq .Job.Status "done"}}bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400
+            {{else if eq .Job.Status "in_progress"}}bg-teal-50 text-teal-700 dark:bg-teal-950 dark:text-teal-300
+            {{else}}bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300{{end}}">{{humanize .Job.Status}}</span>
+          <span class="capitalize">{{.Job.Priority}} priority</span>
+          <a href="/clients/{{.Job.ClientID}}" class="text-teal-700 hover:underline dark:text-teal-400">{{.Job.ClientName}}</a>
+          {{if .Job.ProjectName}}<a href="/projects/{{.Job.ProjectID}}" class="text-teal-700 hover:underline dark:text-teal-400">{{.Job.ProjectName}}</a>{{end}}
+          {{if hasdate .Job.DueDate}}<span class="{{if overdue .Job.DueDate .Job.Status}}font-medium text-red-600 dark:text-red-400{{end}}">Due {{date .Job.DueDate}}</span>{{end}}
+        </p>
+      </div>
+    </div>
+  </header>
+
+  {{if .Error}}
+  <p role="alert" class="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">{{.Error}}</p>
+  {{end}}
+
+  {{if .Job.Description}}
+  <section class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+    <p class="whitespace-pre-line text-sm text-slate-600 dark:text-slate-300">{{.Job.Description}}</p>
+  </section>
+  {{end}}
+
+  <details open class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+    <summary class="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">Edit job</summary>
+    <form method="post" action="/jobs/{{.Job.ID}}" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      {{template "job_fields" .}}
+      <label class="block sm:col-span-2"><span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Project</span>
+        <select name="project_id" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+          <option value="">— No project —</option>
+          {{$selected := .JobForm.ProjectID}}
+          {{range .Projects}}<option value="{{.ID}}" {{if eq $selected .ID}}selected{{end}}>{{.Name}}</option>{{end}}
+        </select></label>
+      <div class="sm:col-span-2">
+        <button type="submit" class="inline-flex min-h-11 items-center rounded-lg bg-teal-600 px-4 text-sm font-semibold text-white hover:bg-teal-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600">Save changes</button>
+      </div>
+    </form>
+  </details>
+
+  <section class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+    <p class="text-xs text-slate-400 dark:text-slate-500">Created {{date .Job.CreatedAt}}{{if hasdate .Job.CompletedAt}} · Completed {{date .Job.CompletedAt}}{{end}}</p>
+    <details class="mt-3 rounded-xl border border-red-200 p-3 dark:border-red-900">
+      <summary class="cursor-pointer text-sm font-medium text-red-700 dark:text-red-300">Delete job</summary>
+      <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Delete <strong>{{.Job.Title}}</strong>? This cannot be undone.</p>
+      <form method="post" action="/jobs/{{.Job.ID}}/delete" class="mt-3">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <button type="submit" class="inline-flex min-h-10 items-center rounded-lg bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600">Delete job</button>
+      </form>
+    </details>
+  </section>
+</article>
+{{end}}

@@ -97,8 +97,26 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /clients/{id}/notes/{nid}/secret", s.requireFull(s.requireCSRF(s.handleNoteSecret)))
 	mux.HandleFunc("POST /clients/{id}/notes/{nid}/delete", s.requireFull(s.requireCSRF(s.handleNoteDelete)))
 	mux.HandleFunc("POST /notes/{nid}/reveal", s.requireFull(s.requireCSRF(s.handleNoteReveal)))
-	mux.HandleFunc("GET /projects", s.requireFull(s.handleSection("Projects", "projects")))
-	mux.HandleFunc("GET /jobs", s.requireFull(s.handleSection("Jobs", "jobs")))
+	mux.HandleFunc("POST /clients/{id}/projects", s.requireFull(s.requireCSRF(s.handleClientProjectCreate)))
+	mux.HandleFunc("POST /clients/{id}/jobs", s.requireFull(s.requireCSRF(s.handleClientJobCreate)))
+
+	// Projects. A project always belongs to a client (F6.4).
+	mux.HandleFunc("GET /projects", s.requireFull(s.handleProjects))
+	mux.HandleFunc("POST /projects", s.requireFull(s.requireCSRF(s.handleProjectCreate)))
+	mux.HandleFunc("GET /projects/{id}", s.requireFull(s.handleProjectShow))
+	mux.HandleFunc("POST /projects/{id}", s.requireFull(s.requireCSRF(s.handleProjectUpdate)))
+	mux.HandleFunc("POST /projects/{id}/delete", s.requireFull(s.requireCSRF(s.handleProjectDelete)))
+	mux.HandleFunc("POST /projects/{id}/jobs", s.requireFull(s.requireCSRF(s.handleProjectJobCreate)))
+
+	// Jobs. A job belongs to a client and optionally to one of its projects
+	// (F7.1); creation is available from the client page, project page, and
+	// the global jobs view (F7.3).
+	mux.HandleFunc("GET /jobs", s.requireFull(s.handleJobs))
+	mux.HandleFunc("POST /jobs", s.requireFull(s.requireCSRF(s.handleJobCreate)))
+	mux.HandleFunc("GET /jobs/{id}", s.requireFull(s.handleJobShow))
+	mux.HandleFunc("POST /jobs/{id}", s.requireFull(s.requireCSRF(s.handleJobUpdate)))
+	mux.HandleFunc("POST /jobs/{id}/delete", s.requireFull(s.requireCSRF(s.handleJobDelete)))
+
 	mux.HandleFunc("GET /settings", s.requireFull(s.handleSettings))
 	return securityHeaders(mux)
 }
@@ -332,6 +350,21 @@ type pageData struct {
 	Notes []crm.Note
 	Note  crm.Note
 	Audit []auth.AuditRecord
+
+	// Phase 6 projects and jobs view model.
+	Projects        []crm.Project
+	Project         crm.Project
+	OngoingProjects []crm.Project
+	Jobs            []crm.Job
+	Job             crm.Job
+	UpcomingJobs    []crm.Job
+	OverdueJobs     []crm.Job
+	ProjectForm     crm.ProjectInput
+	JobForm         crm.JobInput
+	FormClientID    int64
+	ClientFilter    string
+	ProjectFilter   string
+	Due             string
 }
 
 func (s *Server) render(w http.ResponseWriter, status int, name string, data pageData) {
@@ -686,29 +719,32 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, err)
 		return
 	}
-	s.render(w, http.StatusOK, "home.html", pageData{
-		Title:     "Dashboard",
-		CSRFToken: sess.CSRFToken,
-		User:      sess.User,
-		Authed:    true,
-		Active:    "home",
-		Clients:   recent,
-	})
-}
-
-// handleSection renders a placeholder inside the app shell for a section whose
-// features land in a later phase, so the shell's navigation is coherent.
-func (s *Server) handleSection(title, active string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		sess := sessionFrom(r.Context())
-		s.render(w, http.StatusOK, "section.html", pageData{
-			Title:     title,
-			CSRFToken: sess.CSRFToken,
-			User:      sess.User,
-			Authed:    true,
-			Active:    active,
-		})
+	ongoing, err := s.crm.OngoingProjects(r.Context(), 5)
+	if err != nil {
+		s.serverError(w, err)
+		return
 	}
+	overdue, err := s.crm.OverdueJobs(r.Context(), 5)
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	upcoming, err := s.crm.UpcomingJobs(r.Context(), 5)
+	if err != nil {
+		s.serverError(w, err)
+		return
+	}
+	s.render(w, http.StatusOK, "home.html", pageData{
+		Title:           "Dashboard",
+		CSRFToken:       sess.CSRFToken,
+		User:            sess.User,
+		Authed:          true,
+		Active:          "home",
+		Clients:         recent,
+		OngoingProjects: ongoing,
+		OverdueJobs:     overdue,
+		UpcomingJobs:    upcoming,
+	})
 }
 
 // handleSettings renders the global audit view (F13.3). The rest of the

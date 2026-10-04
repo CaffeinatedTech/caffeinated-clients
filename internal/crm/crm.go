@@ -15,8 +15,11 @@ import (
 
 // Sentinel errors. Handlers map these to 404s and inline form messages.
 var (
-	ErrNotFound     = errors.New("crm: not found")
-	ErrNameRequired = errors.New("crm: name is required")
+	ErrNotFound      = errors.New("crm: not found")
+	ErrNameRequired  = errors.New("crm: name is required")
+	ErrTitleRequired = errors.New("crm: title is required")
+	ErrInvalidInput  = errors.New("crm: invalid input")
+	ErrInvalidDate   = errors.New("crm: invalid date")
 )
 
 const (
@@ -35,6 +38,33 @@ func parseTS(s string) time.Time {
 		return time.Time{}
 	}
 	t, err := time.Parse(tsLayout, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
+// dateLayout is the date-only format stored for project and job due dates. ISO
+// date strings sort lexicographically, so range filters stay simple.
+const dateLayout = "2006-01-02"
+
+func parseDate(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", nil
+	}
+	t, err := time.Parse(dateLayout, s)
+	if err != nil {
+		return "", ErrInvalidDate
+	}
+	return t.Format(dateLayout), nil
+}
+
+func parseDateValue(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	t, err := time.Parse(dateLayout, s)
 	if err != nil {
 		return time.Time{}
 	}
@@ -639,7 +669,7 @@ func (s *Store) searchProjects(ctx context.Context, text string, limit int) ([]H
 		}
 		h.Kind = "project"
 		h.Subtitle = status + " · " + h.ClientName
-		h.Href = fmt.Sprintf("/clients/%d", h.ClientID)
+		h.Href = fmt.Sprintf("/projects/%d", h.ID)
 		out = append(out, h)
 	}
 	return out, rows.Err()

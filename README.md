@@ -223,19 +223,25 @@ container, installable on your phone.
 
 ## Status
 
-**Phase 4 complete** — clients, contacts, search, and dashboard. Clients can
-be created with just a name, then edited, archived/restored, filtered and
-sorted, and permanently deleted behind a confirmation that names the client
-and the exact dependent counts. Each client page has tabs (Overview,
-Contacts, and placeholders for Notes/Projects/Jobs/Activity) with call/email/
-website/map quick actions; contacts are full CRUD with a single-primary rule
-enforced in the data layer. Search matches client names, contact name/phone/
-email, project names, and non-secret note titles, grouped by kind and served
-as an HTMX fragment with a full-page fallback; phone formatting is normalized
-so `555-0100`, `(555) 0100`, and `+15550100` all match. Secret notes and note
-bodies never appear in search. The dashboard shows recent clients and the same
-instant search. Authentication still gates everything (Phase 2) inside the
-Phase 3 PWA shell.
+**Phase 6 complete** — clients, contacts, notes, secrets, projects, jobs,
+search, and dashboard. Clients can be created with just a name, then edited,
+archived/restored, filtered and sorted, and permanently deleted behind a
+confirmation that names the client and the exact dependent counts. Each client
+page has tabs (Overview, Contacts, Notes, Projects, Jobs, Activity) with
+call/email/website/map quick actions; contacts are full CRUD with a
+single-primary rule enforced in the data layer. Notes support pinned and
+secret flags: secret bodies are masked everywhere and revealed only through an
+audited, `no-store` response that re-masks after 15 seconds, and secret notes
+never appear in search. Projects have a status lifecycle and live job-based
+progress; jobs optionally roll up to a project of the **same client** (enforced
+in the data layer), and marking a job done records a completion timestamp.
+Global Projects and Jobs views offer status/date/name filters, and the
+dashboard surfaces ongoing projects plus overdue and upcoming jobs. Search
+matches client names, contact name/phone/email, project names, and non-secret
+note titles, grouped by kind and served as an HTMX fragment with a full-page
+fallback; phone formatting is normalized so `555-0100`, `(555) 0100`, and
+`+15550100` all match. Authentication gates everything inside the Phase 3 PWA
+shell.
 
 ## License
 

@@ -1,0 +1,16 @@
+{{define "project_fields"}}
+<label class="block"><span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Name</span>
+  <input name="name" required value="{{.ProjectForm.Name}}" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"></label>
+<label class="block"><span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Status</span>
+  <select name="status" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">
+    <option value="planning" {{if eq .ProjectForm.Status "planning"}}selected{{end}}>Planning</option>
+    <option value="active" {{if eq .ProjectForm.Status "active"}}selected{{end}}>Active</option>
+    <option value="waiting" {{if eq .ProjectForm.Status "waiting"}}selected{{end}}>Waiting</option>
+    <option value="done" {{if eq .ProjectForm.Status "done"}}selected{{end}}>Done</option>
+    <option value="archived" {{if eq .ProjectForm.Status "archived"}}selected{{end}}>Archived</option>
+  </select></label>
+<label class="block"><span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Due date</span>
+  <input type="date" name="due_date" value="{{.ProjectForm.DueDate}}" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"></label>
+<label class="block"><span class="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">Description</span>
+  <textarea name="description" rows="3" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950">{{.ProjectForm.Description}}</textarea></label>
+{{end}}

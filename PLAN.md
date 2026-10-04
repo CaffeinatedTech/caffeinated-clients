@@ -431,13 +431,34 @@ HTMX conventions:
 
 ### Phase 6 — Projects and jobs
 
-- [ ] Projects CRUD + status lifecycle; progress from jobs.
-- [ ] Jobs CRUD, link to project (same-client constraint enforced),
+- [x] Projects CRUD + status lifecycle; progress from jobs.
+- [x] Jobs CRUD, link to project (same-client constraint enforced),
       completion timestamps.
-- [ ] Dashboard widgets: ongoing projects, upcoming/overdue jobs.
-- [ ] Global projects and jobs views with filters.
-- [ ] Tests: same-client project/job constraint, ongoing status set,
+- [x] Dashboard widgets: ongoing projects, upcoming/overdue jobs.
+- [x] Global projects and jobs views with filters.
+- [x] Tests: same-client project/job constraint, ongoing status set,
       overdue query.
+- **Decisions landed:** projects and jobs live in `internal/crm`
+  (`projects.go`, `jobs.go`) over the same encrypted `*sql.DB`; the Phase 1
+  schema already had both tables, so **no new migration** was needed.
+  Due dates are stored date-only (`YYYY-MM-DD`) in the existing nullable
+  `TEXT` columns, so overdue/upcoming windows are plain string comparisons
+  and ISO ordering. The project lifecycle tracks timestamps in SQL:
+  `started_at` is set on the first move to `active`/`done`, `completed_at`
+  tracks `done` and is cleared on reopen; jobs set `completed_at` on `done`
+  and clear it when reopened (F7.5). The same-client project/job rule is a
+  store-layer existence check (`checkProjectSameClient`), so it holds for
+  every entry point, not just the UI. Progress (jobs done/total) is a pair
+  of correlated subqueries on project reads, so lists and dashboards need
+  no second query. Global views are `/projects` and `/jobs` with filter and
+  sort forms, plus `/projects/{id}` and `/jobs/{id}` detail pages; creation
+  is available from the client page (HTMX panels), the project page, and the
+  global views (F6.4/F7.3). Dashboard widgets come from
+  `OngoingProjects`/`OverdueJobs`/`UpcomingJobs`. Project search results now
+  link to `/projects/{id}`. The now-dead `section.html` placeholder and its
+  `handleSection` handler are deleted. Template gotcha recorded: a zero
+  `time.Time` is a truthy struct in `html/template`, so optional dates are
+  guarded by a `hasdate` helper rather than `{{if .SomeTime}}`.
 
 ### Phase 7 — Settings, export, deploy polish
 
