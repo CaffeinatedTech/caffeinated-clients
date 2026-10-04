@@ -1,0 +1,24 @@
+# Environment and secrets — never commit real values
+.env
+.env.*
+!.env.example
+
+# Encrypted SQLite database and its WAL/SHM sidecars
+*.db
+*.db-wal
+*.db-shm
+data/
+
+# Backups
+backup-*.db
+*.backup
+
+# Build output
+/caffeinated-clients
+/bin/
+web/static/app.css
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
