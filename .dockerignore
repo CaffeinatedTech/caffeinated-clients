@@ -1,0 +1,14 @@
+# Never ship secrets, data, or build noise into the image.
+.git
+.gitignore
+.env
+.env.*
+data/
+*.db
+*.db-wal
+*.db-shm
+backup-*.db
+*.backup
+/caffeinated-clients
+/bin/
+web/static/app.css

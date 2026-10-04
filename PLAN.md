@@ -94,11 +94,13 @@ encrypted CRM.
 - HTMX vendored (`web/static/htmx.min.js`), served locally, no CDN.
 - Tailwind CSS standalone CLI, built in the Docker build stage.
 - SQLite under SQLCipher, driven by a SQLCipher-backed `database/sql`
-  driver (CGO). Starting candidate: `github.com/mutecomm/go-sqlcipher/v4`
-  (self-contained, bundles its own AES crypto, no OpenSSL). Confirm
-  maintenance at Phase 1; maintained forks such as
-  `github.com/sjzar/go-sqlcipher` are acceptable. Rejected: the newer
-  pure-Go "encryption at rest" drivers until they have real-world
+  driver (CGO). **Driver chosen at Phase 1:** `github.com/sjzar/go-sqlcipher`
+  v0.0.5 (package `sqlite3`, driver name `sqlcipher`; released 2026-09-21,
+  tracks `mattn/go-sqlite3` v1.14.52 and bundles SQLCipher 4.12.0 / SQLite
+  3.51.1 with libtomcrypt AES, so the binary links fully static against musl
+  with no OpenSSL). The original candidate `github.com/mutecomm/go-sqlcipher/v4`
+  was last released 2020-12-07 and is effectively unmaintained. Rejected: the
+  newer pure-Go "encryption at rest" drivers until they have real-world
   security review — do not adopt unvetted crypto for this app.
 - Migrations embedded and applied at startup.
 - `golang.org/x/crypto/argon2` for password hashing. TOTP implemented
@@ -115,9 +117,10 @@ encrypted CRM.
 - Key is validated at startup: correct length, correct decode, and a
   successful `SELECT` against `sqlite_master`. A wrong key must fail
   closed (never create/overwrite an empty database).
-- `PRAGMA cipher_memory_security = ON` and a sane
-  `PRAGMA cipher_page_size` chosen once and documented; changing page
-  size later requires a migration, so set it at creation.
+- `PRAGMA cipher_memory_security = ON`. `PRAGMA cipher_page_size` is pinned
+  to **4096** at creation (SQLCipher 4's default) and documented here;
+  changing page size later requires a re-encryption migration, so it is set
+  once in the connection DSN.
 - WAL mode + `foreign_keys=ON` on every connection.
 - Rotation is deferred: a future `rekey` command runs `PRAGMA rekey`
   with the new key. The README warns that losing the key is permanent
@@ -126,8 +129,8 @@ encrypted CRM.
 ## Target data model
 
 ```
-clients    (id, name, status, website, address, summary, tags,
-            created_at, updated_at, archived_at)
+clients    (id, name, status, website, address, phone, phone_digits,
+            summary, tags, created_at, updated_at, archived_at)
 contacts   (id, client_id, name, role, phone, phone_digits, email,
             notes, is_primary, created_at, updated_at)
 notes      (id, client_id, title, body, pinned, is_secret,
@@ -154,13 +157,14 @@ Notes:
   no distinction for encryption purposes.
 - `audit_log` is append-only; `detail` is JSON but must never contain
   the body of a secret note, passwords, tokens, or recovery codes.
-- Indexes: `clients(name)`, `contacts(phone_digits)`,
-  `contacts(client_id)`, `notes(client_id)`, `notes(title)`,
-  `projects(client_id, status)`, `projects(name)`,
+- Indexes: `clients(name)`, `clients(phone_digits)`,
+  `contacts(phone_digits)`, `contacts(client_id)`,
+  `contacts(client_id) WHERE is_primary = 1` (unique), `notes(client_id)`,
+  `notes(title)`, `projects(client_id, status)`, `projects(name)`,
   `jobs(client_id, status, due_date)`, `jobs(project_id)`,
-  `sessions(token_hash)`, `audit_log(at)`. Secret-note rows are
-  excluded from search at query time (`AND is_secret = 0`), not by
-  index structure.
+  `sessions(token_hash)`, `audit_log(at)`, `audit_log(client_id)`.
+  Secret-note rows are excluded from search at query time
+  (`AND is_secret = 0`), not by index structure.
 - FTS5 tables are intentionally omitted from v1.
 
 ## Request/UX map
@@ -277,20 +281,29 @@ HTMX conventions:
 
 ### Phase 1 — Skeleton, config, encrypted database, health
 
-- [ ] `go mod init github.com/CaffeinatedTech/caffeinated-clients`,
+- [x] `go mod init github.com/CaffeinatedTech/caffeinated-clients`,
       plus `docker-compose.yml` and `Dockerfile` — deferred from Phase 0
       because they cannot be verified until a buildable binary exists.
-- [ ] `main.go` with flags (`--bootstrap-admin`, `--healthcheck`) and
+- [x] `main.go` with flags (`--bootstrap-admin`, `--healthcheck`) and
       env config loader with validation.
-- [ ] Select and pin the SQLCipher driver after a maintenance check;
+- [x] Select and pin the SQLCipher driver after a maintenance check;
       open the DB with the raw key, `PRAGMA key`, `cipher_memory_security`,
       WAL, and `foreign_keys=ON`. Verify a fully static musl build
       early (the risk is the build, not the app).
-- [ ] Embedded migrations runner with `PRAGMA user_version`; full
+- [x] Embedded migrations runner with `PRAGMA user_version`; full
       schema from the data model above.
-- [ ] `GET /healthz` doing a decrypting DB ping.
-- [ ] Structured logging (`log/slog`) with redaction helper.
-- [ ] `go build/vet/gofmt/test` clean.
+- [x] `GET /healthz` doing a decrypting DB ping.
+- [x] Structured logging (`log/slog`) with redaction helper.
+- [x] `go build/vet/gofmt/test` clean.
+- **Decisions landed:** driver pinned to `github.com/sjzar/go-sqlcipher
+  v0.0.5` (see Stack decisions); `cipher_page_size = 4096`;
+  connections are `MaxOpenConns(1)`; encryption tests prove the file has
+  no plaintext marker and a wrong key fails closed without touching the
+  file.
+- **Note:** `--bootstrap-admin` initialises and migrates the database;
+  the single-user account itself is created in Phase 2. The static musl
+  link is produced by the Docker build stage — verify with
+  `docker build .` where a Docker daemon is available.
 
 ### Phase 2 — Auth, sessions, CSRF, bootstrap
 

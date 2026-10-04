@@ -81,9 +81,13 @@ Android phone as a PWA with light and dark themes.
 | PWA | Web App Manifest + service worker (static assets only) | Installable, offline shell, installs on Android |
 
 Note on the database driver: `modernc.org/sqlite` has no encryption
-codec, so this project uses a SQLCipher-backed driver (CGO). The exact
-driver is confirmed at Phase 1 (see [PLAN.md](PLAN.md) risks); it must
-bundle its own AES crypto so the binary can still be statically linked.
+codec, so this project uses a SQLCipher-backed driver (CGO). Phase 1
+pinned **[`github.com/sjzar/go-sqlcipher`](https://github.com/sjzar/go-sqlcipher)**
+v0.0.5 — a maintained fork of `mattn/go-sqlite3` that bundles SQLCipher
+4.12.0 / SQLite 3.51.1 with libtomcrypt AES, so the binary links fully
+static against musl with no OpenSSL. The earlier candidate
+`mutecomm/go-sqlcipher` was last released in 2020. See
+[PLAN.md](PLAN.md) for the decision.
 
 ## Quick start
 
@@ -95,7 +99,7 @@ git clone https://github.com/CaffeinatedTech/caffeinated-clients
 cd caffeinated-clients
 export CCLIENTS_DB_KEY=$(head -c 32 /dev/urandom | base64)
 cp env.example .env            # or export the vars below
-go run . --bootstrap-admin     # creates the single user, prints setup URL
+go run . --bootstrap-admin     # initialise + migrate the encrypted database
 go run .
 ```
 
@@ -214,9 +218,14 @@ container, installable on your phone.
 
 ## Status
 
-Documentation and repo scaffold only so far — README, REQUIREMENTS,
-PLAN, AGENTS, LICENSE, `.gitignore`, and `env.example`. No code has been
-written. The build starts at Phase 1 in [PLAN.md](PLAN.md).
+**Phase 1 complete** — Go module scaffold, environment config loader,
+the encrypted SQLCipher database (raw key, WAL, foreign keys,
+`cipher_memory_security`), embedded migrations with the full schema, a
+decrypting `GET /healthz`, structured logging with redaction, and the
+Docker/Compose build. The app currently serves only `/healthz`;
+authentication and the UI are Phase 2 onward in [PLAN.md](PLAN.md).
+`--bootstrap-admin` initialises and migrates the database; the
+single-user account itself is created in Phase 2.
 
 ## License
 
