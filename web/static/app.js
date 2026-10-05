@@ -32,19 +32,38 @@
   syncToggles();
   document.addEventListener("htmx:afterSettle", syncToggles);
 
-  // Secret reveal: a revealed body re-masks after 15 seconds (F5.3). The timer
+  // Secret reveal: a revealed body re-masks after 5 minutes (F5.3). The timer
   // and controls are delegated to the swapped fragment, and nothing is written
   // outside the DOM except the clipboard on explicit copy (F5.8).
+  var REVEAL_HIDE_MS = 300000;
+
+  function clearRevealTimer(el) {
+    if (el.__ccRevealTimer) {
+      clearTimeout(el.__ccRevealTimer);
+      el.__ccRevealTimer = null;
+    }
+  }
+
   function hideSecret(el) {
     var shown = el.querySelector("[data-revealed]");
     var masked = el.querySelector("[data-masked]");
     if (shown) shown.hidden = true;
     if (masked) masked.hidden = false;
-    if (el.__ccRevealTimer) {
-      clearTimeout(el.__ccRevealTimer);
-      el.__ccRevealTimer = null;
-    }
+    clearRevealTimer(el);
     el.removeAttribute("data-secret-reveal");
+  }
+
+  // An open edit form keeps the reveal visible: auto-hide is suspended until
+  // Save submits or Cancel/close collapses it, at which point the timer resets.
+  function autoHide(el) {
+    var edit = el.querySelector("[data-secret-edit]");
+    if (edit && edit.open) return;
+    hideSecret(el);
+  }
+
+  function scheduleHide(el) {
+    clearRevealTimer(el);
+    el.__ccRevealTimer = setTimeout(function () { autoHide(el); }, REVEAL_HIDE_MS);
   }
 
   function armSecret(el) {
@@ -61,7 +80,16 @@
         }
       });
     }
-    el.__ccRevealTimer = setTimeout(function () { hideSecret(el); }, 15000);
+    var edit = el.querySelector("[data-secret-edit]");
+    if (edit) {
+      edit.addEventListener("toggle", function () {
+        if (edit.open) clearRevealTimer(el);
+        else if (el.hasAttribute("data-secret-reveal")) scheduleHide(el);
+      });
+      var cancel = edit.querySelector("[data-secret-cancel]");
+      if (cancel) cancel.addEventListener("click", function () { edit.open = false; });
+    }
+    scheduleHide(el);
   }
 
   function armReveals(scope) {

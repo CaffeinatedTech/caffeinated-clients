@@ -180,7 +180,10 @@ There is no separate "credential" object. Secrets are notes with a flag.
   Masking shows the title and metadata but not the body.
 - F5.3 Revealing a secret note requires an explicit tap. As soon as the
   user taps reveal, the body is shown; there is no confirmation dialog.
-  The revealed body re-masks after 15 seconds (auto-hide).
+  The revealed body re-masks after 5 minutes (auto-hide). The auto-hide
+  is suspended while the note's edit form is open; it resumes when the
+  form is saved or cancelled, so a secret can be edited without the
+  field disappearing mid-edit.
 - F5.4 A reveal returns the body only for the request that requested
   it, with `Cache-Control: no-store`. The body is never present in a
   normal page render, list, or search result.

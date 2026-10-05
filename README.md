@@ -37,7 +37,7 @@ Android phone as a PWA with light and dark themes.
 - **Secret notes with tap-to-reveal.** Any note can be flagged as a
   secret. Secret notes are masked everywhere — lists, search, the client
   page, and the job page — and shown only when you tap reveal. They
-  re-mask after 15 seconds, and every reveal is written to the audit log.
+  re-mask after 5 minutes, and every reveal is written to the audit log.
 - **Projects and jobs.** Long-running work lives on the dashboard; jobs
   are the discrete bits of work that roll up to a project or stand
   alone. A job has its own notes for what you find while working it —
@@ -209,7 +209,7 @@ Sessions are random tokens stored hashed server-side, cookies are
 `HttpOnly`, `Secure`, `SameSite=Lax`, and every state change carries a
 CSRF token. Secret notes are masked by default; a reveal returns the
 value for that request only with `Cache-Control: no-store`, re-masks
-after 15 seconds, and is logged. Secrets never appear in normal
+after 5 minutes (suspended while editing), and is logged. Secrets never appear in normal
 responses, search, or logs. The app sets a strict CSP and makes no
 third-party requests. See [REQUIREMENTS.md](REQUIREMENTS.md) §Security
 for the full list.

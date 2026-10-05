@@ -126,7 +126,7 @@ invariants:
    only exception is the explicit reveal response for the current
    request, which is audited.
 2. Reveal responses set `Cache-Control: no-store` and the value
-   re-masks after 15 seconds on the client.
+   re-masks after 5 minutes on the client (suspended while editing).
 3. Never weaken the single-user + password + TOTP model. The only
    break-glass is `CCLIENTS_DISABLE_2FA=true`, which must log loudly and
    still require the password.
@@ -153,7 +153,8 @@ invariants:
   return the same form partial with inline messages and preserved
   values.
 - Secret reveal: `hx-post="/notes/{id}/reveal"` swaps in the body
-  fragment and starts the 15-second auto-mask timer.
+  fragment and starts the 5-minute auto-mask timer; the timer pauses
+  while the edit form is open and resets on save or cancel.
 - Use `hx-indicator` for slow actions; never block the whole page on a
   single widget.
 - Templates live under `web/templates/`; keep partials small and named
